@@ -1,0 +1,17 @@
+{
+  "custom-server-name": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "@your-org/your-mcp-server-package",
+      "--arg1",
+      "value1",
+      "--arg2",
+      "value2"
+    ],
+    "env": {
+      "CUSTOM_API_KEY": "your_api_key_here",
+      "CUSTOM_CONFIG": "custom_value"
+    }
+  }
+}

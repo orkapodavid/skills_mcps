@@ -1,0 +1,11 @@
+{
+  "filesystem": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "@anthropic-ai/mcp-server-filesystem",
+      "/path/to/allowed/directory1",
+      "/path/to/allowed/directory2"
+    ]
+  }
+}
