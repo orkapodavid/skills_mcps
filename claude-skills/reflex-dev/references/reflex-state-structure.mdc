@@ -1,0 +1,1863 @@
+---
+title: Reflex State Structure and Organization Patterns
+description: Comprehensive guide to organizing and structuring state in Reflex applications including substates, component state, mixins, and shared state for building scalable, maintainable applications
+keywords: reflex, state, state-structure, substates, component-state, mixins, shared-state, state-organization, performance, collaboration
+globs: ["**/*.py"]
+---
+
+# Reflex State Structure and Organization Patterns
+
+This guide covers advanced state organization patterns in Reflex for building scalable and maintainable applications. Use these patterns to structure complex applications with proper separation of concerns, code reuse, and real-time collaboration.
+
+## Table of Contents
+
+1. [State Structure Overview](#state-structure-overview)
+2. [Substates and Multiple States](#substates-and-multiple-states)
+3. [Component State](#component-state)
+4. [State Mixins](#state-mixins)
+5. [Shared State (Collaborative)](#shared-state-collaborative)
+6. [Performance Best Practices](#performance-best-practices)
+
+---
+
+## State Structure Overview
+
+### Why State Structure Matters
+
+As Reflex applications grow, proper state organization becomes critical for:
+- **Maintainability**: Easier to understand and modify code
+- **Performance**: Load only necessary state for each operation
+- **Reusability**: Share functionality across different parts of the app
+- **Collaboration**: Enable real-time multi-user features
+
+### State Organization Patterns
+
+| Pattern | Purpose | Best For |
+|---------|---------|----------|
+| **Substates** | Organize by page/feature | Large apps with multiple pages |
+| **ComponentState** | Encapsulate component logic | Reusable UI components |
+| **Mixins** | Share functionality | Common patterns across states |
+| **SharedState** | Multi-client sync | Real-time collaborative features |
+
+---
+
+## Substates and Multiple States
+
+Substates allow you to break up your state into multiple classes, making large applications more manageable and improving performance.
+
+### Basic Multiple States Pattern
+
+Create a separate state class for each page or major feature:
+
+```python
+import reflex as rx
+
+class DashboardState(rx.State):
+    """State for the dashboard page."""
+    dashboard_count: int = 0
+    active_widgets: list[str] = []
+    
+    def increment_dashboard(self):
+        self.dashboard_count += 1
+    
+    def toggle_widget(self, widget_id: str):
+        if widget_id in self.active_widgets:
+            self.active_widgets.remove(widget_id)
+        else:
+            self.active_widgets.append(widget_id)
+
+class SettingsState(rx.State):
+    """State for the settings page."""
+    theme: str = "light"
+    notifications_enabled: bool = True
+    salutation: str = "Hello"
+    
+    def toggle_theme(self):
+        self.theme = "dark" if self.theme == "light" else "light"
+    
+    def set_salutation(self, value: str):
+        self.salutation = value
+
+class ProfileState(rx.State):
+    """State for the profile page."""
+    username: str = ""
+    email: str = ""
+    avatar_url: str = ""
+    
+    def update_profile(self, **kwargs):
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+```
+
+**Key Benefits:**
+- **Separation of Concerns**: Each state focuses on one area
+- **Independent Loading**: States load only when needed
+- **Clear Organization**: Easy to find and modify specific features
+- **Team Collaboration**: Different developers can work on different states
+
+### Accessing Other States with get_state
+
+Event handlers can access and modify variables in other states:
+
+```python
+import reflex as rx
+
+class SettingsState(rx.State):
+    salutation: str = "Hello"
+    language: str = "en"
+    
+    def set_salutation(self, value: str):
+        self.salutation = value
+
+class GreeterState(rx.State):
+    message: str = ""
+    greet_count: int = 0
+    
+    async def greet(self, name: str):
+        # Access another state's data
+        settings = await self.get_state(SettingsState)
+        self.message = f"{settings.salutation}, {name}!"
+        self.greet_count += 1
+
+# Usage in component
+def greeter_page():
+    return rx.vstack(
+        rx.heading("Greeter Settings"),
+        rx.input(
+            on_change=SettingsState.set_salutation,
+            placeholder="Enter salutation",
+            value=SettingsState.salutation
+        ),
+        rx.divider(),
+        rx.heading("Greet Someone"),
+        rx.button(
+            "Greet User",
+            on_click=lambda: GreeterState.greet("User")
+        ),
+        rx.text(GreeterState.message, font_size="2xl"),
+        rx.text(f"Greeted {GreeterState.greet_count} times")
+    )
+```
+
+**Why use get_state:**
+- **Loose Coupling**: States don't depend directly on each other
+- **Performance**: Components don't load all states unnecessarily
+- **Flexibility**: Easy to modify state relationships
+
+### Accessing Individual Var Values
+
+For better performance, retrieve single variables without loading entire states:
+
+```python
+import reflex as rx
+
+class CounterState(rx.State):
+    count: int = 0
+    multiplier: int = 2
+    
+    def increment(self):
+        self.count += 1
+    
+    def decrement(self):
+        self.count -= 1
+
+class DisplayState(rx.State):
+    message: str = ""
+    last_value: int = 0
+    
+    async def show_count(self):
+        # Get just the count value - more efficient than get_state
+        count_value = await self.get_var_value(CounterState.count)
+        self.last_value = count_value
+        self.message = f"Current count: {count_value}"
+    
+    async def show_doubled(self):
+        # Can get multiple individual values
+        count = await self.get_var_value(CounterState.count)
+        multiplier = await self.get_var_value(CounterState.multiplier)
+        result = count * multiplier
+        self.message = f"{count} × {multiplier} = {result}"
+
+# Usage
+def counter_display():
+    return rx.vstack(
+        rx.hstack(
+            rx.button("−", on_click=CounterState.decrement),
+            rx.text(CounterState.count, font_size="2xl"),
+            rx.button("+", on_click=CounterState.increment),
+        ),
+        rx.divider(),
+        rx.button("Show Count", on_click=DisplayState.show_count),
+        rx.button("Show Doubled", on_click=DisplayState.show_doubled),
+        rx.text(DisplayState.message, color="blue")
+    )
+```
+
+**When to use get_var_value:**
+- ✅ Need only one or two specific variables
+- ✅ The other state has many variables or large data
+- ✅ Want to avoid loading unnecessary state data
+- ❌ Need multiple variables from the same state (use `get_state` instead)
+
+**Note:** Raises `UnretrievableVarValueError` if the variable is not retrievable (e.g., computed vars that depend on complex state).
+
+### Performance Implications
+
+Understanding how Reflex loads states is crucial for performance:
+
+**State Loading Behavior:**
+
+When an event handler is called, Reflex loads:
+1. The substate containing the event handler
+2. All parent states (if inheriting from another state)
+3. All child substates of the parent
+
+```python
+import reflex as rx
+
+# ❌ BAD: Deep hierarchy causes unnecessary loading
+class BaseState(rx.State):
+    shared_data: dict = {}
+
+class ParentState(BaseState):
+    parent_data: list = []
+
+class ChildState(ParentState):
+    child_data: str = ""
+    
+    def update_child(self):
+        # This loads BaseState, ParentState, AND ChildState!
+        self.child_data = "updated"
+
+# ✅ GOOD: Flat structure loads only what's needed
+class SharedData(rx.State):
+    shared_data: dict = {}
+
+class FeatureAState(rx.State):
+    feature_a_data: list = []
+    
+    async def update_feature_a(self):
+        # Only loads FeatureAState
+        # Can access shared data if needed
+        shared = await self.get_state(SharedData)
+        self.feature_a_data = list(shared.shared_data.values())
+
+class FeatureBState(rx.State):
+    feature_b_data: str = ""
+    
+    def update_feature_b(self):
+        # Only loads FeatureBState
+        self.feature_b_data = "updated"
+```
+
+**Performance Optimization Rules:**
+
+1. **Flat Structure**: Keep most substates directly inheriting from `rx.State`
+2. **Inherit Sparingly**: Only inherit when parent holds commonly used data
+3. **Separate Concerns**: Implement different features with independent states
+4. **Computed Vars Placement**: Define computed vars in leaf states only
+
+**Computed Vars and Performance:**
+
+```python
+import reflex as rx
+
+# ❌ BAD: Computed var in state with large data
+class DataState(rx.State):
+    large_dataset: list[dict] = []  # Thousands of items
+    user_preferences: dict = {}
+    
+    @rx.var
+    def filtered_data(self) -> list[dict]:
+        # This state is ALWAYS loaded because of this computed var
+        return [d for d in self.large_dataset if d.get("active")]
+
+# ✅ GOOD: Separate computed vars into small, focused states
+class DataStorage(rx.State):
+    """Just stores data - no computed vars."""
+    large_dataset: list[dict] = []
+
+class DataView(rx.State):
+    """Handles data presentation with computed vars."""
+    filter_active: bool = True
+    
+    @rx.var
+    async def filtered_data(self) -> list[dict]:
+        """Access data only when needed."""
+        storage = await self.get_state(DataStorage)
+        if self.filter_active:
+            return [d for d in storage.large_dataset if d.get("active")]
+        return storage.large_dataset
+```
+
+---
+
+## Component State
+
+**New in version 0.4.6**
+
+`rx.ComponentState` creates component-scoped state, perfect for reusable UI components that operate independently.
+
+### Basic ComponentState
+
+```python
+import reflex as rx
+
+class ReusableCounter(rx.ComponentState):
+    """A reusable counter component with its own isolated state."""
+    count: int = 0
+    step: int = 1
+    
+    def decrement(self):
+        self.count -= self.step
+    
+    def increment(self):
+        self.count += self.step
+    
+    def reset(self):
+        self.count = 0
+    
+    @classmethod
+    def get_component(cls, **props):
+        """Define the UI for this component."""
+        return rx.card(
+            rx.vstack(
+                rx.heading(f"Counter: {cls.count}", size="md"),
+                rx.hstack(
+                    rx.button("−", on_click=cls.decrement, size="2"),
+                    rx.button("Reset", on_click=cls.reset, size="2"),
+                    rx.button("+", on_click=cls.increment, size="2"),
+                ),
+                spacing="2",
+            ),
+            **props
+        )
+
+# Usage - each instance maintains independent state
+def page():
+    return rx.vstack(
+        rx.heading("Independent Counters"),
+        rx.grid(
+            ReusableCounter.create(),
+            ReusableCounter.create(),
+            ReusableCounter.create(),
+            columns="3",
+            spacing="4",
+        ),
+        spacing="4",
+    )
+```
+
+**Each counter instance:**
+- Has its own `count` value
+- Responds to events independently
+- Maintains separate state from other instances
+
+### ComponentState with Props
+
+```python
+import reflex as rx
+
+class EditableText(rx.ComponentState):
+    """Editable text component that works with internal or external state."""
+    editing: bool = False
+    _internal_value: str = "Click to edit"
+    
+    def start_edit(self):
+        self.editing = True
+    
+    def stop_edit(self):
+        self.editing = False
+    
+    def set_internal_value(self, value: str):
+        self._internal_value = value
+    
+    @classmethod
+    def get_component(cls, *children, value=None, on_change=None, placeholder="", **props):
+        """
+        Flexible component that can use internal or external state.
+        
+        Args:
+            value: External value to display (optional)
+            on_change: External change handler (optional)
+            placeholder: Placeholder text for input
+        """
+        # Use provided value or internal state
+        display_value = value if value is not None else cls._internal_value
+        
+        # Use provided handler or internal setter
+        change_handler = on_change if on_change is not None else cls.set_internal_value
+        
+        return rx.cond(
+            cls.editing,
+            # Edit mode: show input
+            rx.input(
+                value=display_value,
+                on_change=change_handler,
+                on_blur=cls.stop_edit,
+                placeholder=placeholder,
+                auto_focus=True,
+                **props
+            ),
+            # View mode: show text
+            rx.text(
+                display_value,
+                on_click=cls.start_edit,
+                cursor="pointer",
+                _hover={"bg": "gray.100"},
+                padding="2",
+                border_radius="md",
+                **props
+            )
+        )
+
+# Usage 1: With internal state (fully self-contained)
+def standalone_example():
+    return rx.vstack(
+        rx.heading("Standalone Editable Texts"),
+        EditableText.create(placeholder="Enter first name"),
+        EditableText.create(placeholder="Enter last name"),
+    )
+
+# Usage 2: With global state (controlled component)
+class FormState(rx.State):
+    name: str = "John Doe"
+    email: str = "john@example.com"
+
+def controlled_example():
+    return rx.vstack(
+        rx.heading("Controlled Editable Texts"),
+        rx.text(f"Name: "),
+        EditableText.create(
+            value=FormState.name,
+            on_change=FormState.set_name,
+            placeholder="Enter name"
+        ),
+        rx.text(f"Email: "),
+        EditableText.create(
+            value=FormState.email,
+            on_change=FormState.set_email,
+            placeholder="Enter email"
+        ),
+        rx.divider(),
+        rx.text(f"Form Data: {FormState.name} ({FormState.email})")
+    )
+```
+
+### Accessing ComponentState from Outside
+
+Access the underlying state via the `.State` attribute:
+
+```python
+import reflex as rx
+
+class ReusableCounter(rx.ComponentState):
+    count: int = 0
+    
+    def increment(self):
+        self.count += 1
+    
+    def decrement(self):
+        self.count -= 1
+    
+    @classmethod
+    def get_component(cls, **props):
+        return rx.hstack(
+            rx.button("−", on_click=cls.decrement),
+            rx.text(cls.count, font_size="xl"),
+            rx.button("+", on_click=cls.increment),
+        )
+
+class PageState(rx.State):
+    total: int = 0
+    
+    def calculate_total(self):
+        """Calculate total from multiple counter instances."""
+        # Access component state values
+        self.total = counter1.State.count + counter2.State.count + counter3.State.count
+
+def page():
+    # Assign instances to variables to reference their state
+    counter1 = ReusableCounter.create()
+    counter2 = ReusableCounter.create()
+    counter3 = ReusableCounter.create()
+    
+    return rx.vstack(
+        rx.heading("Counter Dashboard"),
+        rx.card(
+            rx.vstack(
+                rx.heading(f"Total: {PageState.total}", size="lg"),
+                rx.button("Calculate Total", on_click=PageState.calculate_total),
+            )
+        ),
+        rx.grid(
+            counter1,
+            counter2,
+            counter3,
+            columns="3",
+            spacing="4",
+        ),
+    )
+
+# You can also interact with component state directly
+def advanced_interactions():
+    counter = ReusableCounter.create()
+    
+    return rx.vstack(
+        counter,
+        rx.divider(),
+        rx.heading("External Controls"),
+        rx.hstack(
+            rx.button(
+                "Double",
+                on_click=lambda: counter.State.set_count(counter.State.count * 2)
+            ),
+            rx.button(
+                "Triple",
+                on_click=lambda: counter.State.set_count(counter.State.count * 3)
+            ),
+            rx.button(
+                "Reset",
+                on_click=lambda: counter.State.set_count(0)
+            ),
+        ),
+    )
+```
+
+### ComponentState Limitations
+
+⚠️ **CRITICAL**: ComponentState cannot be used inside `rx.foreach()`
+
+```python
+# ❌ WRONG: Don't use ComponentState in foreach
+def bad_example():
+    items = ["A", "B", "C"]
+    return rx.foreach(
+        items,
+        lambda item: ReusableCounter.create()  # Creates only ONE state for all!
+    )
+
+# ✅ CORRECT: Create instances explicitly
+def good_example():
+    return rx.vstack(
+        ReusableCounter.create(),  # Independent instance 1
+        ReusableCounter.create(),  # Independent instance 2
+        ReusableCounter.create(),  # Independent instance 3
+    )
+
+# ✅ ALTERNATIVE: Use regular state with foreach
+class ListCounterState(rx.State):
+    counters: dict[str, int] = {"A": 0, "B": 0, "C": 0}
+    
+    def increment(self, key: str):
+        self.counters[key] += 1
+
+def foreach_alternative():
+    return rx.vstack(
+        rx.foreach(
+            ListCounterState.counters.keys(),
+            lambda key: rx.hstack(
+                rx.text(key),
+                rx.text(ListCounterState.counters[key]),
+                rx.button("+", on_click=lambda: ListCounterState.increment(key))
+            )
+        )
+    )
+```
+
+**When to use ComponentState:**
+- ✅ Reusable UI widgets (modals, cards, forms)
+- ✅ Independent components with encapsulated logic
+- ✅ Components that don't share state with siblings
+- ❌ Dynamic lists generated by `rx.foreach`
+- ❌ Components that need to share state between instances
+
+---
+
+## State Mixins
+
+State mixins enable code reuse by defining shared functionality that multiple states can inherit.
+
+### Basic Mixin Definition
+
+Create a mixin with `mixin=True`:
+
+```python
+import reflex as rx
+
+class CounterMixin(rx.State, mixin=True):
+    """Reusable counter functionality for any state."""
+    count: int = 0
+    
+    @rx.var
+    def count_display(self) -> str:
+        return f"Count: {self.count}"
+    
+    @rx.var
+    def is_positive(self) -> bool:
+        return self.count > 0
+    
+    def increment(self):
+        self.count += 1
+    
+    def decrement(self):
+        self.count -= 1
+    
+    def reset(self):
+        self.count = 0
+
+# Use the mixin in multiple states
+class DashboardState(CounterMixin):
+    """Dashboard with counter functionality."""
+    dashboard_name: str = "Main Dashboard"
+
+class AnalyticsState(CounterMixin):
+    """Analytics with counter functionality."""
+    analytics_type: str = "Page Views"
+
+# Usage
+def app():
+    return rx.vstack(
+        rx.heading("Dashboard"),
+        rx.text(DashboardState.count_display),
+        rx.button("Increment", on_click=DashboardState.increment),
+        rx.divider(),
+        rx.heading("Analytics"),
+        rx.text(AnalyticsState.count_display),
+        rx.button("Increment", on_click=AnalyticsState.increment),
+    )
+```
+
+**What mixins provide:**
+- Base variables
+- Computed variables (`@rx.var`)
+- Event handlers
+- Backend variables (underscore-prefixed)
+
+### Multiple Mixin Inheritance
+
+Combine multiple mixins for complex functionality:
+
+```python
+import reflex as rx
+from datetime import datetime
+
+class TimestampMixin(rx.State, mixin=True):
+    """Add timestamp tracking to any state."""
+    last_updated: str = ""
+    
+    def update_timestamp(self):
+        self.last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    @rx.var
+    def time_ago(self) -> str:
+        if not self.last_updated:
+            return "Never updated"
+        return f"Last updated: {self.last_updated}"
+
+class LoggingMixin(rx.State, mixin=True):
+    """Add logging capability to any state."""
+    _logs: list[str] = []
+    
+    def log(self, message: str):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self._logs.append(f"[{timestamp}] {message}")
+    
+    @rx.var
+    def recent_logs(self) -> list[str]:
+        return self._logs[-5:]  # Last 5 logs
+    
+    def clear_logs(self):
+        self._logs = []
+
+class CounterMixin(rx.State, mixin=True):
+    """Counter functionality."""
+    count: int = 0
+    
+    def increment(self):
+        self.count += 1
+
+# Combine all three mixins
+class AdvancedCounter(CounterMixin, TimestampMixin, LoggingMixin):
+    """State with counter, timestamp, and logging."""
+    name: str = "Advanced Counter"
+    
+    def increment_with_logging(self):
+        """Increment and log the action."""
+        self.increment()
+        self.update_timestamp()
+        self.log(f"Incremented to {self.count}")
+
+# Usage
+def advanced_counter_page():
+    return rx.vstack(
+        rx.heading(AdvancedCounter.name),
+        rx.text(f"Count: {AdvancedCounter.count}", font_size="2xl"),
+        rx.text(AdvancedCounter.time_ago, color="gray"),
+        rx.button("Increment", on_click=AdvancedCounter.increment_with_logging),
+        rx.divider(),
+        rx.heading("Activity Log", size="sm"),
+        rx.vstack(
+            rx.foreach(
+                AdvancedCounter.recent_logs,
+                lambda log: rx.text(log, font_size="sm", font_family="monospace")
+            ),
+            align_items="start",
+        ),
+        rx.button("Clear Logs", on_click=AdvancedCounter.clear_logs, size="sm"),
+    )
+```
+
+### Backend Variables in Mixins
+
+Store server-side data securely:
+
+```python
+import reflex as rx
+from typing import Optional
+
+class AuthMixin(rx.State, mixin=True):
+    """Authentication functionality with secure backend storage."""
+    
+    # Backend-only (not sent to client)
+    _session_token: str = ""
+    _user_permissions: list[str] = []
+    _password_hash: str = ""
+    
+    # Public (sent to client)
+    username: str = ""
+    is_authenticated: bool = False
+    
+    def login(self, username: str, password: str):
+        """Login user (simplified example)."""
+        # In production, verify password hash
+        if password == "correct_password":  # Demo only!
+            self._session_token = "secure_token_123"
+            self._user_permissions = ["read", "write"]
+            self.username = username
+            self.is_authenticated = True
+    
+    def logout(self):
+        """Clear session data."""
+        self._session_token = ""
+        self._user_permissions = []
+        self.username = ""
+        self.is_authenticated = False
+    
+    @rx.var
+    def can_edit(self) -> bool:
+        """Check if user has edit permission."""
+        return "write" in self._user_permissions
+
+class AdminState(AuthMixin):
+    """Admin dashboard with authentication."""
+    admin_data: list[dict] = []
+
+# Usage - sensitive data stays on server
+def admin_page():
+    return rx.cond(
+        AdminState.is_authenticated,
+        rx.vstack(
+            rx.heading(f"Welcome, {AdminState.username}"),
+            rx.cond(
+                AdminState.can_edit,
+                rx.button("Edit Data"),
+                rx.text("Read-only access")
+            ),
+            rx.button("Logout", on_click=AdminState.logout),
+        ),
+        rx.vstack(
+            rx.heading("Please Login"),
+            rx.button("Login", on_click=lambda: AdminState.login("admin", "password"))
+        )
+    )
+```
+
+**Use cases for backend variables:**
+- 🔒 Sensitive data (passwords, tokens, API keys)
+- 🗄️ Database connections
+- 💾 Server-side caches
+- 📊 Large datasets not needed on client
+
+### Computed Variables in Mixins
+
+```python
+import reflex as rx
+
+class PricingMixin(rx.State, mixin=True):
+    """Pricing calculations for e-commerce."""
+    base_price: float = 0.0
+    tax_rate: float = 0.10
+    discount_percent: float = 0.0
+    
+    @rx.var
+    def discount_amount(self) -> float:
+        return self.base_price * (self.discount_percent / 100)
+    
+    @rx.var
+    def price_after_discount(self) -> float:
+        return self.base_price - self.discount_amount
+    
+    @rx.var
+    def tax_amount(self) -> float:
+        return self.price_after_discount * self.tax_rate
+    
+    @rx.var
+    def final_price(self) -> float:
+        return self.price_after_discount + self.tax_amount
+    
+    @rx.var
+    def price_breakdown(self) -> dict:
+        return {
+            "base": f"${self.base_price:.2f}",
+            "discount": f"-${self.discount_amount:.2f}",
+            "subtotal": f"${self.price_after_discount:.2f}",
+            "tax": f"+${self.tax_amount:.2f}",
+            "total": f"${self.final_price:.2f}"
+        }
+
+class ProductState(PricingMixin):
+    product_name: str = "Premium Widget"
+    in_stock: bool = True
+    
+    def set_price(self, price: float):
+        self.base_price = price
+    
+    def apply_discount(self, percent: float):
+        self.discount_percent = percent
+
+# Usage
+def product_page():
+    return rx.vstack(
+        rx.heading(ProductState.product_name),
+        rx.vstack(
+            rx.text(f"Base Price: {ProductState.price_breakdown['base']}"),
+            rx.text(f"Discount: {ProductState.price_breakdown['discount']}", color="green"),
+            rx.text(f"Subtotal: {ProductState.price_breakdown['subtotal']}"),
+            rx.text(f"Tax: {ProductState.price_breakdown['tax']}"),
+            rx.divider(),
+            rx.heading(f"Total: {ProductState.price_breakdown['total']}", size="lg"),
+        ),
+        rx.button("Apply 20% Discount", on_click=lambda: ProductState.apply_discount(20)),
+    )
+```
+
+### Nested Mixin Inheritance
+
+Create hierarchical functionality:
+
+```python
+import reflex as rx
+
+class BaseMixin(rx.State, mixin=True):
+    """Foundation functionality."""
+    base_value: str = "base"
+    
+    def get_base(self) -> str:
+        return self.base_value
+
+class ExtendedMixin(BaseMixin, mixin=True):
+    """Extends base with additional features."""
+    extended_value: str = "extended"
+    
+    @rx.var
+    def combined(self) -> str:
+        return f"{self.base_value}-{self.extended_value}"
+
+class AdvancedMixin(ExtendedMixin, mixin=True):
+    """Further extends with advanced features."""
+    advanced_value: str = "advanced"
+    
+    @rx.var
+    def full_path(self) -> str:
+        return f"{self.combined}-{self.advanced_value}"
+
+class FinalMixin(AdvancedMixin, mixin=True):
+    """Final layer of functionality."""
+    final_value: str = "final"
+    
+    @rx.var
+    def complete(self) -> str:
+        return f"{self.full_path}-{self.final_value}"
+
+class CompleteState(FinalMixin):
+    """State with all mixin layers."""
+    pass
+
+# Usage - inherits entire chain
+def demo():
+    return rx.vstack(
+        rx.text(f"Base: {CompleteState.base_value}"),
+        rx.text(f"Extended: {CompleteState.extended_value}"),
+        rx.text(f"Combined: {CompleteState.combined}"),
+        rx.text(f"Advanced: {CompleteState.advanced_value}"),
+        rx.text(f"Full Path: {CompleteState.full_path}"),
+        rx.text(f"Final: {CompleteState.final_value}"),
+        rx.text(f"Complete: {CompleteState.complete}", font_weight="bold"),
+    )
+```
+
+### Real-World Mixin Examples
+
+**Form Validation Mixin:**
+
+```python
+import reflex as rx
+import re
+
+class FormValidationMixin(rx.State, mixin=True):
+    """Reusable form validation logic."""
+    _errors: dict[str, str] = {}
+    is_valid: bool = True
+    
+    def validate_required(self, field: str, value: str):
+        """Validate required field."""
+        if not value or not value.strip():
+            self._errors[field] = f"{field} is required"
+            self.is_valid = False
+        else:
+            self._errors.pop(field, None)
+            self._update_validity()
+    
+    def validate_email(self, field: str, value: str):
+        """Validate email format."""
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, value):
+            self._errors[field] = "Invalid email format"
+            self.is_valid = False
+        else:
+            self._errors.pop(field, None)
+            self._update_validity()
+    
+    def validate_min_length(self, field: str, value: str, min_length: int):
+        """Validate minimum length."""
+        if len(value) < min_length:
+            self._errors[field] = f"{field} must be at least {min_length} characters"
+            self.is_valid = False
+        else:
+            self._errors.pop(field, None)
+            self._update_validity()
+    
+    def _update_validity(self):
+        """Update overall validity."""
+        self.is_valid = len(self._errors) == 0
+    
+    def get_error(self, field: str) -> str:
+        """Get error message for field."""
+        return self._errors.get(field, "")
+    
+    def clear_errors(self):
+        """Clear all errors."""
+        self._errors = {}
+        self.is_valid = True
+
+class ContactFormState(FormValidationMixin):
+    """Contact form with validation."""
+    name: str = ""
+    email: str = ""
+    message: str = ""
+    
+    def set_name(self, value: str):
+        self.name = value
+        self.validate_required("name", value)
+        self.validate_min_length("name", value, 2)
+    
+    def set_email(self, value: str):
+        self.email = value
+        self.validate_required("email", value)
+        self.validate_email("email", value)
+    
+    def set_message(self, value: str):
+        self.message = value
+        self.validate_required("message", value)
+        self.validate_min_length("message", value, 10)
+    
+    async def submit(self):
+        """Submit form if valid."""
+        if self.is_valid:
+            # Process form submission
+            return rx.toast.success("Form submitted!")
+        return rx.toast.error("Please fix errors")
+
+# Usage
+def contact_form():
+    return rx.form(
+        rx.vstack(
+            rx.input(
+                placeholder="Name",
+                on_change=ContactFormState.set_name,
+                value=ContactFormState.name,
+            ),
+            rx.cond(
+                ContactFormState.get_error("name") != "",
+                rx.text(ContactFormState.get_error("name"), color="red", font_size="sm"),
+            ),
+            rx.input(
+                placeholder="Email",
+                on_change=ContactFormState.set_email,
+                value=ContactFormState.email,
+            ),
+            rx.cond(
+                ContactFormState.get_error("email") != "",
+                rx.text(ContactFormState.get_error("email"), color="red", font_size="sm"),
+            ),
+            rx.text_area(
+                placeholder="Message",
+                on_change=ContactFormState.set_message,
+                value=ContactFormState.message,
+            ),
+            rx.cond(
+                ContactFormState.get_error("message") != "",
+                rx.text(ContactFormState.get_error("message"), color="red", font_size="sm"),
+            ),
+            rx.button(
+                "Submit",
+                on_click=ContactFormState.submit,
+                disabled=~ContactFormState.is_valid,
+            ),
+        ),
+        width="100%",
+    )
+```
+
+**Loading State Mixin:**
+
+```python
+import reflex as rx
+import asyncio
+
+class LoadingMixin(rx.State, mixin=True):
+    """Manage loading states for async operations."""
+    is_loading: bool = False
+    _loading_tasks: set[str] = set()
+    loading_message: str = "Loading..."
+    
+    def start_loading(self, task_id: str = "default", message: str = "Loading..."):
+        """Start loading for a specific task."""
+        self._loading_tasks.add(task_id)
+        self.is_loading = True
+        self.loading_message = message
+    
+    def stop_loading(self, task_id: str = "default"):
+        """Stop loading for a specific task."""
+        self._loading_tasks.discard(task_id)
+        self.is_loading = len(self._loading_tasks) > 0
+        if not self.is_loading:
+            self.loading_message = ""
+    
+    @rx.var
+    def loading_count(self) -> int:
+        """Number of active loading tasks."""
+        return len(self._loading_tasks)
+    
+    @rx.var
+    def has_multiple_tasks(self) -> bool:
+        """Check if multiple tasks are loading."""
+        return len(self._loading_tasks) > 1
+
+class DataFetchState(LoadingMixin):
+    """State for fetching data with loading indicators."""
+    data: list[dict] = []
+    error: str = ""
+    
+    async def fetch_data(self):
+        """Fetch data from API."""
+        self.start_loading("fetch", "Fetching data...")
+        self.error = ""
+        
+        try:
+            # Simulate API call
+            await asyncio.sleep(2)
+            self.data = [
+                {"id": 1, "name": "Item 1"},
+                {"id": 2, "name": "Item 2"},
+                {"id": 3, "name": "Item 3"},
+            ]
+        except Exception as e:
+            self.error = str(e)
+        finally:
+            self.stop_loading("fetch")
+    
+    async def refresh(self):
+        """Refresh data."""
+        self.start_loading("refresh", "Refreshing...")
+        await asyncio.sleep(1)
+        self.stop_loading("refresh")
+
+# Usage
+def data_page():
+    return rx.vstack(
+        rx.cond(
+            DataFetchState.is_loading,
+            rx.spinner(DataFetchState.loading_message),
+            rx.vstack(
+                rx.foreach(
+                    DataFetchState.data,
+                    lambda item: rx.text(item["name"])
+                ),
+            ),
+        ),
+        rx.hstack(
+            rx.button("Fetch Data", on_click=DataFetchState.fetch_data),
+            rx.button("Refresh", on_click=DataFetchState.refresh),
+        ),
+    )
+```
+
+### Mixin Best Practices
+
+**Design Guidelines:**
+
+1. **Single Responsibility**: Each mixin should focus on ONE area
+2. **Clear Naming**: Use descriptive names ending in "Mixin"
+3. **Documentation**: Document what the mixin provides
+4. **Avoid Overlaps**: Don't define same variables in multiple mixins
+5. **Keep Focused**: Don't create "god mixins" with too much
+
+**Common Use Cases:**
+
+- ✅ Form validation across multiple forms
+- ✅ UI state (modals, loading, notifications)
+- ✅ Logging and debugging
+- ✅ API client functionality
+- ✅ Data formatting and presentation
+- ✅ Authentication and permissions
+- ✅ Pagination and filtering
+
+### Mixin Limitations
+
+**Important constraints:**
+
+1. **Cannot instantiate**: Mixins with `mixin=True` cannot be used as standalone states
+2. **Name conflicts**: Last mixin in inheritance chain wins
+3. **No auto-resolution**: Must manually handle naming conflicts
+4. **Event handler conflicts**: Similar to variables, last wins
+
+```python
+# ⚠️ NAME CONFLICT EXAMPLE
+class MixinA(rx.State, mixin=True):
+    value: str = "A"
+
+class MixinB(rx.State, mixin=True):
+    value: str = "B"  # Conflicts with MixinA
+
+class ConflictState(MixinA, MixinB):
+    pass
+
+# ConflictState.value will be "B" (MixinB wins)
+
+# ✅ SOLUTION: Use unique names
+class MixinA(rx.State, mixin=True):
+    value_a: str = "A"
+
+class MixinB(rx.State, mixin=True):
+    value_b: str = "B"
+
+class NoConflictState(MixinA, MixinB):
+    pass
+```
+
+---
+
+## Shared State (Collaborative)
+
+**New in version 0.8.23**
+
+`rx.SharedState` enables real-time collaboration by allowing multiple clients to share and synchronize state.
+
+### Basic SharedState
+
+```python
+import reflex as rx
+
+class CollaborativeCounter(rx.SharedState):
+    """Shared counter accessible by multiple clients."""
+    count: int = 0
+    
+    def increment(self):
+        """Increment counter - syncs to all connected clients."""
+        self.count += 1
+    
+    def decrement(self):
+        """Decrement counter - syncs to all connected clients."""
+        self.count -= 1
+    
+    def reset(self):
+        """Reset counter - syncs to all connected clients."""
+        self.count = 0
+
+class UserState(rx.State):
+    """Private state for each user."""
+    is_linked: bool = False
+    room_token: str = ""
+    username: str = ""
+    
+    async def link_to_room(self, token: str):
+        """Link this user to a shared room."""
+        self.room_token = token
+        # Link to the shared state with the given token
+        shared = await self.get_state(CollaborativeCounter)
+        await shared._link_to(token)
+        self.is_linked = True
+    
+    async def unlink_from_room(self):
+        """Unlink from the shared room."""
+        shared = await self.get_state(CollaborativeCounter)
+        await shared._unlink()
+        self.is_linked = False
+        self.room_token = ""
+
+# Usage
+def collaborative_counter_page():
+    return rx.vstack(
+        rx.cond(
+            UserState.is_linked,
+            # Linked: show collaborative interface
+            rx.vstack(
+                rx.heading(f"Room: {UserState.room_token}"),
+                rx.heading(f"Count: {CollaborativeCounter.count}", size="2xl"),
+                rx.hstack(
+                    rx.button("−", on_click=CollaborativeCounter.decrement, size="3"),
+                    rx.button("Reset", on_click=CollaborativeCounter.reset, size="3"),
+                    rx.button("+", on_click=CollaborativeCounter.increment, size="3"),
+                ),
+                rx.button("Leave Room", on_click=UserState.unlink_from_room),
+                rx.text("Changes sync to all users in this room!", color="blue"),
+            ),
+            # Not linked: show join interface
+            rx.vstack(
+                rx.heading("Join a Collaborative Room"),
+                rx.input(
+                    placeholder="Enter room ID (e.g., 'room-123')",
+                    on_change=UserState.set_room_token,
+                    value=UserState.room_token,
+                ),
+                rx.button(
+                    "Join Room",
+                    on_click=lambda: UserState.link_to_room(UserState.room_token),
+                ),
+                rx.text("Tip: Share the room ID with others to collaborate!", color="gray"),
+            ),
+        ),
+    )
+```
+
+**Key Concepts:**
+
+- SharedState behaves like normal State until linked to a token
+- Once linked, changes propagate in real-time to all clients with the same token
+- Tokens identify shared instances (e.g., room IDs, document IDs)
+- Each client maintains their own private state
+
+⚠️ **Token cannot contain underscore (_) characters**
+
+### Token Guidelines
+
+**Good token examples:**
+```python
+# Room-based
+"room-123", "meeting-abc", "session-456"
+
+# Document-based
+"doc-xyz789", "board-uuid", "sheet-001"
+
+# Game-based
+"game-12345", "match-ab cd ef"
+```
+
+**Bad token examples:**
+```python
+# ❌ Contains underscore
+"room_123", "user_session"
+
+# ❌ User-specific (should be shared resources)
+"user-john-private"
+
+# ❌ Private client tokens
+self.router.session.client_token  # Reserved for user identification
+```
+
+### Complete Shared State Example
+
+```python
+import reflex as rx
+from datetime import datetime
+
+class SharedChatRoom(rx.SharedState):
+    """Shared collaborative chat room."""
+    _messages: list[dict] = []  # Backend-only
+    _users: dict[str, str] = {}  # client_token -> username
+    
+    @rx.var
+    def message_count(self) -> int:
+        """Public message count."""
+        return len(self._messages)
+    
+    @rx.var
+    def user_count(self) -> int:
+        """Number of users in room."""
+        return len(self._users)
+    
+    def join_room(self, username: str):
+        """User joins the room."""
+        client_token = self.router.session.client_token
+        self._users[client_token] = username
+        self._messages.append({
+            "type": "system",
+            "text": f"{username} joined the room",
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def leave_room(self):
+        """User leaves the room."""
+        client_token = self.router.session.client_token
+        if client_token in self._users:
+            username = self._users[client_token]
+            del self._users[client_token]
+            self._messages.append({
+                "type": "system",
+                "text": f"{username} left the room",
+                "timestamp": datetime.now().isoformat()
+            })
+    
+    def send_message(self, text: str):
+        """Send a message (secured by client_token)."""
+        # SECURITY: Always use client_token from session
+        client_token = self.router.session.client_token
+        username = self._users.get(client_token, "Unknown")
+        
+        self._messages.append({
+            "type": "message",
+            "user": username,
+            "user_token": client_token,
+            "text": text,
+            "timestamp": datetime.now().isoformat()
+        })
+
+class ChatUserState(rx.State):
+    """Private state for each chat user."""
+    current_room: str = ""
+    username: str = ""
+    message_input: str = ""
+    is_connected: bool = False
+    
+    @rx.var
+    async def messages(self) -> list[dict]:
+        """Get messages for current room."""
+        if not self.is_connected:
+            return []
+        
+        shared = await self.get_state(SharedChatRoom)
+        # Return only public message data
+        return [
+            {
+                "type": msg["type"],
+                "user": msg.get("user", "System"),
+                "text": msg["text"],
+                "is_mine": msg.get("user_token") == self.router.session.client_token,
+            }
+            for msg in shared._messages
+        ]
+    
+    async def join_room(self, room_id: str):
+        """Join a chat room."""
+        if not self.username:
+            return rx.toast.error("Please enter a username")
+        
+        self.current_room = room_id
+        shared = await self.get_state(SharedChatRoom)
+        await shared._link_to(room_id)
+        shared.join_room(self.username)
+        self.is_connected = True
+    
+    async def leave_room(self):
+        """Leave current room."""
+        shared = await self.get_state(SharedChatRoom)
+        shared.leave_room()
+        await shared._unlink()
+        self.current_room = ""
+        self.is_connected = False
+    
+    async def send_message(self):
+        """Send a message."""
+        if not self.message_input.strip():
+            return
+        
+        shared = await self.get_state(SharedChatRoom)
+        shared.send_message(self.message_input)
+        self.message_input = ""
+
+# UI
+def chat_page():
+    return rx.cond(
+        ChatUserState.is_connected,
+        # Connected: show chat interface
+        rx.vstack(
+            rx.hstack(
+                rx.heading(f"Room: {ChatUserState.current_room}"),
+                rx.spacer(),
+                rx.text(f"{SharedChatRoom.user_count} users"),
+                rx.button("Leave", on_click=ChatUserState.leave_room, size="sm"),
+            ),
+            rx.divider(),
+            rx.box(
+                rx.vstack(
+                    rx.foreach(
+                        ChatUserState.messages,
+                        lambda msg: rx.cond(
+                            msg["type"] == "system",
+                            rx.text(msg["text"], color="gray", font_style="italic"),
+                            rx.hstack(
+                                rx.text(
+                                    f"{msg['user']}: {msg['text']}",
+                                    bg=rx.cond(msg["is_mine"], "blue.100", "gray.100"),
+                                    padding="2",
+                                    border_radius="md",
+                                ),
+                            ),
+                        ),
+                    ),
+                    align_items="start",
+                ),
+                height="400px",
+                overflow_y="auto",
+                border="1px solid",
+                border_color="gray.200",
+                padding="4",
+            ),
+            rx.hstack(
+                rx.input(
+                    placeholder="Type a message...",
+                    value=ChatUserState.message_input,
+                    on_change=ChatUserState.set_message_input,
+                    flex="1",
+                ),
+                rx.button("Send", on_click=ChatUserState.send_message),
+            ),
+        ),
+        # Not connected: show join interface
+        rx.vstack(
+            rx.heading("Join Chat Room"),
+            rx.input(
+                placeholder="Your username",
+                on_change=ChatUserState.set_username,
+                value=ChatUserState.username,
+            ),
+            rx.input(
+                placeholder="Room ID",
+                on_change=ChatUserState.set_current_room,
+                value=ChatUserState.current_room,
+            ),
+            rx.button(
+                "Join Room",
+                on_click=lambda: ChatUserState.join_room(ChatUserState.current_room),
+            ),
+        ),
+    )
+```
+
+### Security: Client Identification
+
+🔒 **CRITICAL SECURITY RULE**: Always use `self.router.session.client_token` for user identification.
+
+```python
+import reflex as rx
+
+class SecureSharedState(rx.SharedState):
+    _user_data: dict[str, dict] = {}  # Keyed by client_token
+    
+    def update_user_status(self, status: str):
+        """
+        ✅ CORRECT: Use session client_token for identification
+        """
+        # Get client token from secure server-side session
+        client_token = self.router.session.client_token
+        
+        if client_token not in self._user_data:
+            self._user_data[client_token] = {}
+        
+        self._user_data[client_token]["status"] = status
+        self._user_data[client_token]["last_update"] = datetime.now().isoformat()
+    
+    @rx.var
+    def my_status(self) -> str:
+        """Get status for current user."""
+        client_token = self.router.session.client_token
+        return self._user_data.get(client_token, {}).get("status", "offline")
+    
+    # ❌ WRONG - NEVER DO THIS!
+    def update_user_status_INSECURE(self, user_id: str, status: str):
+        """
+        ❌ INSECURE: user_id parameter can be spoofed by malicious clients!
+        A user could call this with someone else's ID.
+        """
+        self._user_data[user_id] = status  # Don't do this!
+
+# ✅ Store sensitive data in backend-only vars
+class SecureRoom(rx.SharedState):
+    # Backend-only (not sent to clients) - prefix with underscore
+    _user_emails: dict[str, str] = {}
+    _user_permissions: dict[str, list[str]] = {}
+    _private_notes: dict[str, str] = {}
+    
+    # Public (sent to all clients)
+    public_message: str = ""
+    
+    def set_user_email(self, email: str):
+        """Store email securely."""
+        client_token = self.router.session.client_token
+        self._user_emails[client_token] = email  # Stays on server only
+    
+    @rx.var
+    def can_edit(self) -> bool:
+        """Check if current user has edit permission."""
+        client_token = self.router.session.client_token
+        permissions = self._user_permissions.get(client_token, [])
+        return "edit" in permissions
+```
+
+### Shared State Best Practices
+
+#### 1. Keep Shared State Minimal
+
+Only include data that truly needs to be shared:
+
+```python
+# ✅ GOOD: Minimal shared state
+class SharedDocument(rx.SharedState):
+    _content: str = ""  # Only the document content
+    _last_modified: str = ""
+    _editor_cursors: dict[str, int] = {}  # client_token -> cursor position
+    
+    def update_content(self, content: str):
+        client_token = self.router.session.client_token
+        self._content = content
+        self._last_modified = datetime.now().isoformat()
+
+# ❌ BAD: Too much in shared state
+class SharedDocumentBad(rx.SharedState):
+    _content: str = ""
+    _user_preferences: dict = {}  # Should be in PRIVATE state!
+    _user_history: list = []  # Should be in PRIVATE state!
+    _ui_state: dict = {}  # Should be in PRIVATE state!
+    _theme: str = ""  # Should be in PRIVATE state!
+```
+
+**Why minimize:**
+- Linked states load for EVERY event on ALL linked clients
+- Large states = slower serialization
+- More clients = more lock contention
+- Performance degrades with size
+
+#### 2. Use Backend-Only Vars
+
+Store shared data with underscore prefix:
+
+```python
+import reflex as rx
+
+class CollaborativeEditor(rx.SharedState):
+    """Shared editing with privacy."""
+    
+    # All shared data is backend-only
+    _document_content: str = ""
+    _edit_history: list[dict] = []
+    _user_cursors: dict[str, int] = {}
+    
+    # Expose via computed vars for personalized access
+    @rx.var
+    def my_cursor_position(self) -> int:
+        """Get current user's cursor only."""
+        client_token = self.router.session.client_token
+        return self._user_cursors.get(client_token, 0)
+    
+    @rx.var
+    def other_users_count(self) -> int:
+        """Count other users (not including self)."""
+        client_token = self.router.session.client_token
+        return len([t for t in self._user_cursors.keys() if t != client_token])
+    
+    def update_cursor(self, position: int):
+        """Update current user's cursor."""
+        client_token = self.router.session.client_token
+        self._user_cursors[client_token] = position
+```
+
+**Benefits:**
+- Each user sees personalized view
+- Sensitive data not exposed
+- Less data transmitted
+- Better caching
+
+#### 3. Expose Per-User Data via Private States
+
+Use private states with async computed vars:
+
+```python
+import reflex as rx
+
+class SharedGameRoom(rx.SharedState):
+    """Shared game state."""
+    _player_scores: dict[str, int] = {}
+    _player_hands: dict[str, list[str]] = {}  # Cards each player holds
+    _game_started: bool = False
+    
+    def play_card(self, card: str):
+        """Play a card from current player's hand."""
+        client_token = self.router.session.client_token
+        hand = self._player_hands.get(client_token, [])
+        if card in hand:
+            hand.remove(card)
+            # Process the card...
+
+class PlayerState(rx.State):
+    """Private state for each player."""
+    
+    @rx.var
+    async def my_score(self) -> int:
+        """Get only MY score."""
+        game = await self.get_state(SharedGameRoom)
+        client_token = self.router.session.client_token
+        return game._player_scores.get(client_token, 0)
+    
+    @rx.var
+    async def my_hand(self) -> list[str]:
+        """Get only MY cards."""
+        game = await self.get_state(SharedGameRoom)
+        client_token = self.router.session.client_token
+        return game._player_hands.get(client_token, [])
+    
+    @rx.var
+    async def other_players(self) -> list[dict]:
+        """Get info about other players (no cards shown)."""
+        game = await self.get_state(SharedGameRoom)
+        client_token = self.router.session.client_token
+        
+        return [
+            {
+                "id": player_id[:8],  # Shortened ID
+                "score": score,
+                "card_count": len(game._player_hands.get(player_id, []))
+                # Not exposing actual cards!
+            }
+            for player_id, score in game._player_scores.items()
+            if player_id != client_token
+        ]
+```
+
+#### 4. Use Dynamic Routes for Rooms
+
+Make sharing easy with URL-based access:
+
+```python
+import reflex as rx
+import secrets
+
+class SharedWhiteboard(rx.SharedState):
+    """Collaborative whiteboard."""
+    _strokes: list[dict] = []
+    
+    def add_stroke(self, stroke_data: dict):
+        client_token = self.router.session.client_token
+        self._strokes.append({
+            **stroke_data,
+            "user": client_token,
+            "timestamp": datetime.now().isoformat()
+        })
+
+class WhiteboardPageState(rx.State):
+    """State for whiteboard page."""
+    room_id: str = ""
+    is_connected: bool = False
+    
+    async def on_load_room(self):
+        """Auto-link when page loads with room ID in URL."""
+        # Extract room_id from URL parameter
+        room_id = self.router.page.params.get("room_id", "")
+        
+        if room_id:
+            self.room_id = room_id
+            whiteboard = await self.get_state(SharedWhiteboard)
+            await whiteboard._link_to(room_id)
+            self.is_connected = True
+
+# Define page with dynamic route
+def whiteboard_page():
+    return rx.vstack(
+        rx.cond(
+            WhiteboardPageState.is_connected,
+            rx.vstack(
+                rx.heading(f"Room: {WhiteboardPageState.room_id}"),
+                rx.text(f"Strokes: {len(SharedWhiteboard._strokes)}"),
+                # Whiteboard canvas...
+            ),
+            rx.text("Connecting...")
+        )
+    )
+
+# Home page with room creation
+class HomeState(rx.State):
+    def create_new_room(self):
+        """Create new room and redirect."""
+        room_id = secrets.token_urlsafe(8)
+        return rx.redirect(f"/whiteboard/{room_id}")
+
+def home_page():
+    return rx.vstack(
+        rx.heading("Collaborative Whiteboard"),
+        rx.button("Create New Room", on_click=HomeState.create_new_room),
+        rx.text("Share the URL with others to collaborate!"),
+    )
+
+# App setup
+app = rx.App()
+app.add_page(home_page, route="/")
+app.add_page(
+    whiteboard_page,
+    route="/whiteboard/[room_id]",  # Dynamic route!
+    on_load=WhiteboardPageState.on_load_room
+)
+```
+
+**Benefits:**
+- Easy sharing: `https://app.com/whiteboard/abc123`
+- Automatic connection on load
+- Bookmarkable sessions
+- Clean UX
+
+---
+
+## Performance Best Practices
+
+### General Guidelines
+
+**State Structure:**
+1. Keep flat structure - most states inherit directly from `rx.State`
+2. Avoid deep inheritance hierarchies
+3. Use `get_state` / `get_var_value` for cross-state access
+4. Separate independent features into different states
+
+**Computed Vars:**
+1. Define in leaf states (no child states)
+2. Avoid in states with large data
+3. Cache expensive computations with `@rx.var(cache=True)`
+4. Use async computed vars to access other states
+
+**Backend Variables:**
+1. Use underscore prefix for server-only data
+2. Store sensitive data as backend variables
+3. Reduce client payload size
+4. Expose via computed vars when needed
+
+### ComponentState Performance
+
+**When to use:**
+- ✅ Independent, reusable components
+- ✅ UI widgets with isolated behavior
+- ✅ Components without shared state needs
+
+**Limitations:**
+- ❌ Cannot use in `rx.foreach` loops
+- ❌ Each instance creates separate state
+- ❌ Not for cross-instance communication
+
+### Shared State Performance
+
+**Optimize for speed:**
+1. Keep minimal - only truly shared data
+2. User-specific data in private states
+3. Backend-only vars with underscore
+4. Periodic cleanup of stale client tokens
+
+**Loading characteristics:**
+- Linked states always load for events
+- Large states = slow serialization
+- More clients = more lock contention
+- Monitor `_linked_from` set size
+
+### Example: Optimized Structure
+
+```python
+import reflex as rx
+
+# ✅ Flat structure - independent features
+class DashboardState(rx.State):
+    """Dashboard-specific state."""
+    widgets_visible: bool = True
+
+class ProfileState(rx.State):
+    """Profile-specific state."""
+    username: str = ""
+    email: str = ""
+
+class SettingsState(rx.State):
+    """Settings state with computed var."""
+    theme: str = "light"
+    
+    @rx.var
+    def is_dark_mode(self) -> bool:
+        return self.theme == "dark"
+
+# ✅ Minimal shared state
+class CollabDocument(rx.SharedState):
+    _content: str = ""
+    
+    def update(self, content: str):
+        self._content = content
+
+# ✅ Private state for personalized view
+class DocumentView(rx.State):
+    @rx.var
+    async def my_content(self) -> str:
+        """Cached in private state."""
+        doc = await self.get_state(CollabDocument)
+        return doc._content
+```
+
+---
+
+## Summary
+
+### Pattern Selection Guide
+
+| Pattern | Use When | Key Benefit |
+|---------|----------|-------------|
+| **Substates** | Multiple pages/features | Organization, performance |
+| **ComponentState** | Reusable widgets | Encapsulation, independence |
+| **Mixins** | Shared functionality | Code reuse, DRY |
+| **SharedState** | Real-time collaboration | Multi-client sync |
+
+### Quick Reference
+
+```python
+# Access other states
+other_state = await self.get_state(OtherState)
+value = await self.get_var_value(OtherState.var_name)
+
+# Component state
+class MyComponent(rx.ComponentState):
+    @classmethod
+    def get_component(cls, **props):
+        return rx.text(cls.value)
+
+# Mixins
+class MyMixin(rx.State, mixin=True):
+    shared_var: str = ""
+
+# Shared state
+class MyShared(rx.SharedState):
+    async def link(self, token: str):
+        await self._link_to(token)
+```
+
+---
+
+## Additional Resources
+
+- [Reflex State Documentation](https://reflex.dev/docs/state/overview/)
+- [State Structure Docs](https://reflex.dev/docs/state-structure/overview/)
+- [Component State Guide](https://reflex.dev/docs/state-structure/component-state/)
+- [Mixins Documentation](https://reflex.dev/docs/state-structure/mixins/)
+- [Shared State Guide](https://reflex.dev/docs/state-structure/shared-state/)
+- [Performance Tips](https://reflex.dev/docs/performance/overview/)

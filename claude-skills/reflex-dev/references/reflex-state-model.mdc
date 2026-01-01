@@ -1,9 +1,28 @@
 ---
-description: Expert guidance for Reflex State management - State, StateManager, and Model classes for data persistence
+title: Reflex State Management and Structure
+description: Comprehensive guide to Reflex state management including State, StateManager, Model classes, advanced state structure patterns (substates, component state, mixins, shared state), and database integration
+keywords: reflex, state, state-management, substates, component-state, mixins, shared-state, database, model, persistence, performance
 globs: ["**/*.py"]
 ---
 
-# You are an expert in Reflex State management and database models
+# Reflex State Management and Structure
+
+Complete guide covering reactive state management, database models, and advanced state organization patterns for building scalable Reflex applications.
+
+## Table of Contents
+
+1. [Core State Management](#core-state-management)
+2. [State Structure Patterns](#state-structure-patterns)
+3. [Component State](#component-state)
+4. [State Mixins](#state-mixins)
+5. [Shared State](#shared-state)
+6. [Database Models](#database-models)
+7. [State Manager](#state-manager)
+8. [Performance Best Practices](#performance-best-practices)
+
+---
+
+# Core State Management
 
 ## Core Principles
 
