@@ -138,18 +138,8 @@ def custom_button(text: str, handler) -> rx.Component:
     )
 ```
 
-## Integration with Existing Projects
-
-These examples can be integrated into the Monaco Payroll System:
-
-1. **Data Table CRUD** - Adapt for employee management, payroll record editing
-2. **Form Validation** - Use for employee data entry, validation rules
-3. **File Upload** - Integrate with Excel import/export functionality
-4. **Counter App** - Adapt for statistics, counters in dashboard
-
 ## Additional Resources
 
 - Reflex Documentation: https://reflex.dev/docs
 - Component Library: https://reflex.dev/docs/library
 - Community Examples: https://github.com/reflex-dev/reflex-examples
-- Monaco Payroll Integration: See `references/patterns.md` for DuckDB/Polars patterns
