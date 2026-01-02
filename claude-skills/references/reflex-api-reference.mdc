@@ -1,0 +1,502 @@
+# Claude Skills Reference: Reflex Framework
+
+This document serves as a technical reference for LLMs generating code or assisting with the Reflex web framework (Python). It focuses on core API specifications, component structures, state management patterns, and CLI workflows.
+
+## 1. App (`reflex.app.App`)
+
+**Capability Name**: Application Container
+
+**Syntax/Usage**:
+- `App` is the main entry point for a Reflex project. Every app must define a single `rx.App` instance, usually in the top-level module (e.g. `main.py`).
+- Core fields from the API:
+  - `theme: Component | None` — Global theme for the entire app.
+  - `style: ComponentStyle` — Global style object applied across pages.
+  - `stylesheets: list[str]` — Extra CSS URLs to include.
+  - `reset_style: bool = True` — Adds CSS reset for margins/padding.
+  - `overlay_component: Component | ComponentCallable | None` — Component shown on every page (defaults to connection error banner).
+  - `app_wraps` / `extra_app_wraps` — Ordered dict of wrap functions applied around the app.
+  - `head_components: list[Component]` — Components injected into `<head>` on every page.
+  - `html_lang: str | None`, `html_custom_attrs: dict[str, str] | None` — Applied to the root `<html>` tag.
+  - `enable_state: bool = True` — Enables/disables Reflex state management.
+  - `frontend_exception_handler`, `backend_exception_handler` — Custom error handlers.
+  - `toaster: Component | None` — Global toast provider.
+  - `api_transformer` — ASGI app transformers/middleware.
+- Key method:
+  - `add_page(component=None, route=None, title=None, description=None, image='favicon.ico', on_load=None, meta=[], context=None)` — Registers a page.
+    - If `component` is a callable, the default `route` is the function name; otherwise, `route` is required.
+
+```python
+import reflex as rx
+
+class IndexState(rx.State):
+    visits: int = 0
+
+    def increment(self):
+        self.visits += 1
+
+
+def index() -> rx.Component:
+    return rx.vstack(
+        rx.text(f"Visits: {IndexState.visits}"),
+        rx.button("Increment", on_click=IndexState.increment),
+    )
+
+app = rx.App(
+    theme=rx.theme(appearance="dark"),
+    style={"font_family": "Inter"},
+    stylesheets=["/static/styles.css"],
+)
+app.add_page(index, route="/", title="Home")
+```
+
+**Gotchas/Common Errors**:
+- **State disablement**: Setting `enable_state=False` turns off Reflex’s backend state system entirely. Only use this for fully static apps.
+- **Route inference**: If `component` is a function, the route defaults to the function name; for non-callable components you must provide `route` explicitly.
+- **Overlay semantics**: Providing `overlay_component` replaces the default connection banner; if you care about connection status, implement your own visual feedback.
+- **Head components**: `head_components` are rendered on every page. Avoid heavy components or dynamically changing content here to reduce layout thrash.
+- **HTML attributes**: Misconfigured `html_lang` / `html_custom_attrs` can affect accessibility and SEO; keep them stable.
+
+**Minimal Code Example**:
+```python
+import reflex as rx
+
+
+def index() -> rx.Component:
+    return rx.text("Hello, Reflex!")
+
+
+app = rx.App()
+app.add_page(index, route="/", title="Home")
+```
+
+## 2. Base (`reflex.base.Base`)
+
+**Capability Name**: Shared Pydantic Base for Data Objects
+
+**Syntax/Usage**:
+- `Base` is the root class used by many Reflex objects and utilities.
+- Any data structure that needs to be serialized between backend and frontend should typically subclass `Base` or a type that inherits from it.
+- It wraps Pydantic under the hood, adding utilities like JSON serialization.
+
+```python
+import reflex as rx
+
+
+class Person(rx.Base):
+    name: str
+    age: int
+
+
+p = Person(name="Ada", age=32)
+json_str = p.json()
+```
+
+**Gotchas/Common Errors**:
+- **Type annotations required**: Fields must be type-annotated (Pydantic-style) for validation/serialization to work correctly.
+- **Non-serializable fields**: Complex Python objects that are not JSON-friendly will fail; use primitive types, lists, dicts, or other `Base`/Pydantic models.
+
+**Minimal Code Example**:
+```python
+class Settings(rx.Base):
+    theme: str = "light"
+    page_size: int = 20
+
+
+settings = Settings()
+print(settings.json())
+```
+
+## 3. Component (`reflex.components.component.Component`)
+
+**Capability Name**: UI Building Blocks
+
+**Syntax/Usage**:
+- All UI elements are ultimately `Component` subclasses.
+- Most of the time, you use higher-level helpers like `rx.box`, `rx.text`, etc., which internally create `Component` instances.
+- Advanced usage involves subclassing `Component` and overriding hook / code / style methods.
+- Key methods from the API:
+  - `add_imports(self) -> ImportDict | list[ImportDict]` — Add JS imports when this component appears.
+  - `add_hooks(self) -> list[str | Var]` — Inject raw JavaScript hooks (e.g. `useEffect`) into the React component.
+  - `add_custom_code(self) -> list[str]` — Module-level JS injected once per page.
+  - `get_event_triggers(cls) -> dict[str, ArgsSpec | Sequence[ArgsSpec]]` — Declares event props (e.g. `on_click`).
+  - `get_props(cls) -> Iterable[str]` — Returns prop names.
+  - `get_initial_props(cls) -> set[str]` — Props to initialize.
+  - `create(cls, *children, **props) -> Component` — Factory used by `rx.<component>()` helpers.
+  - `add_style(self) -> dict[str, Any] | None` — Component-level style dict.
+  - `render(self) -> dict` — Low-level render function.
+  - `get_ref(self) -> str | None` — JS ref name.
+
+```python
+import reflex as rx
+
+
+# Standard composition
+card = rx.box(
+    rx.text("Content"),
+    padding="4",
+    border="1px solid #eaeaea",
+)
+
+
+# Custom component via wrapper function
+def custom_card(text: str) -> rx.Component:
+    return rx.box(
+        rx.text(text),
+        padding="4",
+        border="1px solid #eaeaea",
+    )
+```
+
+**Gotchas/Common Errors**:
+- **Hooks as raw JS**: `add_hooks` must return valid JavaScript strings that can be inserted inside the React component function. They are deduplicated by literal string value.
+- **Custom code deduplication**: `add_custom_code` is deduplicated per page. If you reuse string literals with different semantics, only one will win; use unique code snippets when necessary.
+- **Children vs props**: Positional args are children; keyword args are props. Mixing them incorrectly can lead to unexpected render trees.
+- **Event trigger declaration**: If you are implementing a new component type with event props, ensure `get_event_triggers` returns the correct argument specs; otherwise, LLMs should prefer existing components over custom low-level ones.
+
+**Minimal Code Example**:
+```python
+class MountedComponent(rx.Component):
+    def add_hooks(self) -> list[str]:
+        # Inject a React hook
+        return ["const [mounted, setMounted] = React.useState(false);"]
+
+
+def index() -> rx.Component:
+    return rx.fragment(
+        MountedComponent.create(),
+        rx.text("Mounted component above"),
+    )
+```
+
+## 4. Component State (`reflex.state.ComponentState`)
+
+**Capability Name**: Per-Component State
+
+**Syntax/Usage**:
+- `ComponentState` creates a state instance **per usage** of a component, bundling UI + logic into a single class.
+- Subclass `ComponentState`, define vars and event handlers, then implement `get_component` to return the UI.
+- Use `MyComponentState.create(...)` (or `get_component` directly) when adding it to a page.
+
+```python
+import reflex as rx
+
+
+class Counter(rx.ComponentState):
+    count: int = 0
+
+    def increment(self):
+        self.count += 1
+
+    @classmethod
+    def get_component(cls, **props) -> rx.Component:
+        return rx.button(
+            f"Count: {cls.count}",
+            on_click=cls.increment,
+            **props,
+        )
+
+
+def index() -> rx.Component:
+    return rx.vstack(
+        Counter.create(),   # first independent instance
+        Counter.create(),   # second independent instance
+    )
+```
+
+**Gotchas/Common Errors**:
+- **Instantiation**: Do not instantiate `Counter()` directly; always use `Counter.create()` (or the classmethod pattern provided by Reflex) so state is registered correctly.
+- **Per-instance behavior**: Each usage of `Counter.create()` gets its own state instance. Don’t rely on class-level mutable state for cross-instance sharing.
+- **Event handlers**: Handlers are usually defined as instance methods but referenced via the class (`cls.increment`) in `get_component`.
+
+**Minimal Code Example**:
+```python
+class Toggle(rx.ComponentState):
+    on: bool = False
+
+    def flip(self):
+        self.on = not self.on
+
+    @classmethod
+    def get_component(cls) -> rx.Component:
+        return rx.button(
+            "ON" if cls.on else "OFF",
+            on_click=cls.flip,
+        )
+```
+
+## 5. State (`reflex.state.State`)
+
+**Capability Name**: Global Application State
+
+**Syntax/Usage**:
+- `State` is the base class for app-level state; typically subclassed as `class MyState(rx.State): ...`.
+- Declare reactive vars as annotated class attributes; define event handler methods that mutate `self`.
+- Reflex exposes special built-in handlers like:
+  - `set_is_hydrated(*args, **kwargs) -> EventSpec` — internal hydration flag setter.
+  - `setvar(*args: Any) -> EventSpec` — generic setter used by generated setters.
+
+```python
+import reflex as rx
+
+
+class CounterState(rx.State):
+    value: int = 0
+
+    def increment(self):
+        self.value += 1
+
+
+def index() -> rx.Component:
+    return rx.button(
+        f"Value: {CounterState.value}",
+        on_click=CounterState.increment,
+    )
+```
+
+**Gotchas/Common Errors**:
+- **JSON serialization**: All state vars must be JSON-serializable (primitives, lists, dicts, Pydantic models). Avoid sets and arbitrary Python objects.
+- **Session scope**: State is per-user/session by default. Class attributes are not shared globally unless you explicitly store shared data elsewhere (e.g. database, cache).
+- **Mutation location**: Only mutate `self` inside event handlers (methods invoked by events). Changing a class var at import time or inside computed properties will not be tracked correctly.
+- **Computed logic vs Var logic**: When working with `Var` values derived from state, use Reflex helpers (`rx.cond`, `.to_string()`, etc.) instead of pure Python `if` blocks in UI code.
+
+**Minimal Code Example**:
+```python
+class ToggleState(rx.State):
+    enabled: bool = False
+
+    def toggle(self):
+        self.enabled = not self.enabled
+
+
+def index() -> rx.Component:
+    return rx.button(
+        "Enabled" if ToggleState.enabled else "Disabled",
+        on_click=ToggleState.toggle,
+    )
+```
+
+## 6. Model (`reflex.model.Model`)
+
+**Capability Name**: Database Tables & Migrations
+
+**Syntax/Usage**:
+- `Model` integrates with SQLModel/SQLAlchemy to declare database tables.
+- Typical pattern:
+
+```python
+import reflex as rx
+
+
+class User(rx.Model, table=True):
+    username: str
+    email: str
+
+
+# Create all tables (for simple setups)
+rx.Model.create_all()
+```
+
+- Key methods from the API:
+  - `create_all()` — Create all tables.
+  - `get_db_engine()` — Access underlying SQLAlchemy engine.
+  - `alembic_init()` — Initialize Alembic for migrations.
+  - `get_migration_history()` — Inspect migration history.
+  - `alembic_autogenerate(connection, message=None, write_migration_scripts=True) -> bool` — Autogenerate migration scripts.
+  - `migrate(autogenerate: bool = False) -> bool | None` — Apply Alembic migrations across models.
+  - `select()` — Build a query for the model.
+
+**Gotchas/Common Errors**:
+- **Alembic dependency**: `migrate` and `alembic_autogenerate` require Alembic to be installed and initialized (`alembic_init`). If not, these calls are effectively no-ops or will fail.
+- **Manual fixes**: Autogenerated migrations may fail when you make incompatible schema changes; manual migration editing can be required.
+- **Session management**: Use Reflex’s session helpers (or SQLModel sessions) correctly; don’t forget to commit transactions.
+
+**Minimal Code Example**:
+```python
+class Post(rx.Model, table=True):
+    title: str
+    content: str
+
+
+class BlogState(rx.State):
+    def add_post(self, title: str, content: str):
+        with rx.session() as session:
+            session.add(Post(title=title, content=content))
+            session.commit()
+```
+
+## 7. Event (`reflex.event.Event`)
+
+**Capability Name**: Low-Level Event Representation
+
+**Syntax/Usage**:
+- `Event` is the low-level representation of a state change request.
+- Fields from the API:
+  - `token: str` — Identifies the client.
+  - `name: str` — Event name (usually `state.method_name`).
+  - `router_data: dict` — Routing info where the event occurred.
+  - `payload: dict` — Event payload from the frontend.
+- LLMs rarely need to instantiate `Event` directly; instead, you define state methods and attach them to components (e.g. `on_click=State.method`).
+
+**Gotchas/Common Errors**:
+- **Payload structure**: Frontend payloads should be JSON-compatible and match the event handler’s expectations.
+- **Chaining events**: Advanced handlers can return other events (`EventSpec` or lists of them) to chain actions; be careful about infinite loops.
+
+**Minimal Code Example** (LLM-level usage via state):
+```python
+class FormState(rx.State):
+    submitted: bool = False
+
+    def submit(self, data: dict):
+        # `data` corresponds to the event payload
+        self.submitted = True
+
+
+def index() -> rx.Component:
+    return rx.button(
+        "Submit",
+        on_click=lambda: FormState.submit({"source": "button"}),
+    )
+```
+
+## 8. Config (`reflex.config.Config` / `rxconfig.py`)
+
+**Capability Name**: Runtime and Deployment Configuration
+
+**Syntax/Usage**:
+- `Config` defines how the app runs: ports, database, frontend behavior, state manager, plugins, etc.
+- Typically declared in `rxconfig.py` at the project root:
+
+```python
+# rxconfig.py
+import reflex as rx
+
+
+config = rx.Config(
+    app_name="my_app",
+    db_url="sqlite:///reflex.db",
+    frontend_port=3000,
+    api_url="http://localhost:8000",
+)
+```
+
+- Key configuration areas and representative fields from the API:
+  - **App settings**: `app_name`, `loglevel`, `telemetry_enabled`.
+  - **Server**: `frontend_port`, `frontend_path`, `backend_port`, `api_url`, `deploy_url`, `backend_host`.
+  - **Database**: `db_url`, `async_db_url`, `redis_url`.
+  - **Frontend**: `frontend_packages`, `react_strict_mode`, `show_built_with_reflex`.
+  - **State management**: `state_manager_mode`, `state_auto_setters`, Redis lock/token settings.
+  - **Plugins**: `plugins`, `disable_plugins`.
+  - **Misc**: `env_file`, `transport`, `bun_path`, `static_page_generation_timeout`.
+- Environment variable overrides: any config field can be overridden by `REFLEX_<FIELD_NAME_IN_UPPERCASE>`. Example: `REFLEX_DB_URL`, `REFLEX_FRONTEND_PORT`.
+
+**Gotchas/Common Errors**:
+- **App name mismatch**: `app_name` should match the app directory name; otherwise tooling/CLI may misbehave.
+- **API URL in production**: `api_url` must be set to the publicly reachable backend URL for production deployments.
+- **Env overrides**: Explicit env vars override `rxconfig.py`. LLMs should mention the `REFLEX_` prefix when suggesting deployment configs.
+- **State manager selection**: For Redis-backed state, ensure `state_manager_mode` and `redis_url` are set consistently.
+
+**Minimal Code Example**:
+```python
+# rxconfig.py
+import reflex as rx
+
+
+config = rx.Config(
+    app_name="blog_app",
+    db_url="sqlite:///blog.db",
+    telemetry_enabled=False,
+    cors_allowed_origins=["http://localhost:3000"],
+)
+```
+
+## 9. Var (`reflex.vars.base.Var`)
+
+**Capability Name**: Reactive Values in UI Trees
+
+**Syntax/Usage**:
+- `Var` is the base class for immutable reactive values used in the component tree.
+- You usually interact with `Var` instances indirectly via state attributes (e.g. `MyState.some_field`) rather than creating them manually.
+- Core methods from the API:
+  - `equals(other: Var) -> bool` — Compare two vars.
+  - `create(value, _var_data=None) -> Var` — Construct a `Var` from a Python value.
+  - `to(output_type, var_type=None) -> Var` — Cast to another type (`.to(int)`, `.to(str)`, etc.).
+  - `guess_type()` — Infer the var type.
+  - `bool() -> BooleanVar` — Convert to boolean var.
+  - `is_none() -> BooleanVar`, `is_not_none() -> BooleanVar`.
+  - `to_string(use_json=True) -> StringVar` — String representation.
+  - `js_type() -> StringVar` — JavaScript `typeof` result.
+  - `range(first_endpoint, second_endpoint=None, step=None)` — Numeric range as `ArrayVar`.
+
+```python
+import reflex as rx
+
+
+class DataState(rx.State):
+    items: list[int] = []
+
+
+def index() -> rx.Component:
+    return rx.cond(
+        DataState.items.is_none(),
+        rx.text("No items"),
+        rx.text("Count: " + DataState.items.to(lambda xs: len(xs)).to_string()),
+    )
+```
+
+**Gotchas/Common Errors**:
+- **Python `if` vs reactive conditions**: You cannot branch on `Var` values with plain Python `if` in UI-building code; use `rx.cond` or `Var` methods like `.is_none()`.
+- **Type casting**: When concatenating with strings or using numeric operations, cast explicitly with `.to_string()` or `.to(int)` to avoid ambiguous types.
+- **Serialization**: `Var.create` should only be used when you truly need a manual var; typically LLMs should rely on state fields.
+
+**Minimal Code Example**:
+```python
+class CounterState(rx.State):
+    count: int = 0
+
+    def increment(self):
+        self.count += 1
+
+
+def index() -> rx.Component:
+    return rx.button(
+        "Count: " + CounterState.count.to_string(),
+        on_click=CounterState.increment,
+    )
+```
+
+## 10. CLI (`reflex` command)
+
+**Capability Name**: Project Scaffolding, Dev Server, Export & Cloud
+
+**Syntax/Usage**:
+- The `reflex` CLI manages app creation, development, export, and cloud workflows.
+- Key commands from the API docs:
+  - `reflex --help` — List commands.
+  - `reflex init` — Create or re-initialize a Reflex app in the current directory.
+  - `reflex run` — Run the app (dev by default; supports production mode via flags).
+  - `reflex export` — Export frontend and backend bundles as zip files.
+  - `reflex rename` — Rename the app.
+  - `reflex cloud ...` — Interact with Reflex Cloud (apps, projects, secrets, etc.).
+  - `reflex script ...` — Run helper scripts.
+
+```bash
+# Common workflows
+reflex init          # scaffold or refresh app
+reflex run           # run in dev mode with hot reload
+reflex export        # build exportable bundles
+```
+
+**Gotchas/Common Errors**:
+- **Dev vs prod**: `reflex run` defaults to development mode (hot reload). Use the appropriate flag (e.g. `--env prod` in newer versions) for production-like builds where needed.
+- **Export is frontend-static**: `reflex export` builds a static Next.js frontend plus backend bundle, but you must deploy the backend separately.
+- **Config coupling**: CLI commands rely on `rxconfig.py` and correct `app_name`; broken configs can cause `reflex run` or `reflex export` to fail.
+
+**Minimal Code Example**:
+```bash
+# Clean build and run cycle
+reflex init
+reflex run
+
+# Export for deployment
+reflex export
+```

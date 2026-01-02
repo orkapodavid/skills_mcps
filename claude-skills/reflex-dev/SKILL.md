@@ -377,6 +377,268 @@ reflex db migrate   # Run migrations
        self.count = value
    ```
 
+## Core API Reference
+
+### App (`reflex.app.App`)
+
+**Capability**: Application container, routing, and global theming.
+
+**Key Fields**:
+- `theme: Component | None` – Global theme component for the app.
+- `style: ComponentStyle` – Global style configuration applied across pages.
+- `stylesheets: list[str]` – Additional stylesheets to include.
+- `reset_style: bool = True` – Toggles CSS reset (margin and padding).
+- `overlay_component: Component | ComponentCallable | None` – Overlay component rendered on every page (defaults to connection error banner).
+- `head_components: list[Component]` – Components injected into `<head>` on every page.
+- `html_lang: str | None` – Language attribute for the root `<html>` tag.
+- `html_custom_attrs: dict[str, str] | None` – Extra attributes for root `<html>` tag.
+- `enable_state: bool = True` – Enables or disables Reflex state system.
+- `frontend_exception_handler` / `backend_exception_handler` – Custom error handlers.
+
+**Routing Methods**:
+- `app.add_page(component, route=None, title=None, description=None, image='favicon.ico', on_load=None, meta=[], context=None)`
+  - If `component` is a function, `route` defaults to the function name.
+  - If `component` is a component instance, `route` must be provided.
+
+```python
+import reflex as rx
+
+
+class IndexState(rx.State):
+    visits: int = 0
+
+    def increment(self):
+        self.visits += 1
+
+
+def index() -> rx.Component:
+    return rx.vstack(
+        rx.text(f"Visits: {IndexState.visits}"),
+        rx.button("Increment", on_click=IndexState.increment),
+    )
+
+
+app = rx.App(
+    theme=rx.theme(appearance="dark"),
+    style={"font_family": "Inter"},
+    stylesheets=["/static/styles.css"],
+)
+app.add_page(index, route="/", title="Home")
+```
+
+### State (`reflex.state.State`) and Component State (`reflex.state.ComponentState`)
+
+**Global State (`State`)**:
+- Base class for application-level state.
+- State variables must be JSON-serializable (int, str, bool, float, list, dict, Pydantic models).
+- All mutations occur inside event handler methods.
+- Selected built-in helpers:
+  - `set_is_hydrated(*args, **kwargs) -> EventSpec` – Internal hydration flag event.
+  - `setvar(*args: Any) -> EventSpec` – Generic setter used by generated setters.
+
+```python
+class CounterState(rx.State):
+    value: int = 0
+
+    def increment(self):
+        self.value += 1
+
+
+def index() -> rx.Component:
+    return rx.button(
+        f"Value: {CounterState.value}",
+        on_click=CounterState.increment,
+    )
+```
+
+**Component-local State (`ComponentState`)**:
+- Encapsulates state and UI per usage of a component.
+- Each `MyComponentState.create()` call yields an independent instance.
+
+```python
+class Counter(rx.ComponentState):
+    count: int = 0
+
+    def increment(self):
+        self.count += 1
+
+    @classmethod
+    def get_component(cls, **props) -> rx.Component:
+        return rx.button(
+            f"Count: {cls.count}",
+            on_click=cls.increment,
+            **props,
+        )
+
+
+def index() -> rx.Component:
+    return rx.vstack(
+        Counter.create(),
+        Counter.create(),
+    )
+```
+
+**State Gotchas**:
+- Mutate only inside event handlers; avoid direct mutation at import time.
+- Treat state as per-session; use databases or caches for shared data.
+- Use `rx.cond` and Var helpers when branching on state-derived reactive values.
+
+### Component (`reflex.components.component.Component`)
+
+**Capability**: Base class for all UI elements.
+
+**Key Methods**:
+- `create(*children, **props) -> Component` – Factory used by `rx.box`, `rx.text`, etc.
+- `add_imports(self) -> ImportDict | list[ImportDict]` – JS imports required by the component.
+- `add_hooks(self) -> list[str | Var]` – Raw JavaScript hooks (e.g. `useEffect`) injected into the React component.
+- `add_custom_code(self) -> list[str]` – Module-level JS snippets (deduplicated per page).
+- `get_event_triggers(cls) -> dict[str, ArgsSpec | Sequence[ArgsSpec]]` – Declares event props such as `on_click`, `on_change`, etc.
+- `get_props(cls) -> Iterable[str]` – Declares available props.
+- `get_initial_props(cls) -> set[str]` – Declares props to initialize.
+- `add_style(self) -> dict[str, Any] | None` – Returns additional style for this component instance.
+
+```python
+class MountedComponent(rx.Component):
+    def add_hooks(self) -> list[str]:
+        return ["const [mounted, setMounted] = React.useState(false);"]
+
+
+def index() -> rx.Component:
+    return rx.fragment(
+        MountedComponent.create(),
+        rx.text("Mounted component above"),
+    )
+```
+
+**Component Gotchas**:
+- `add_hooks` and `add_custom_code` strings are deduplicated by literal value; keep different behaviors in distinct strings.
+- Positional arguments are children, keyword arguments are props; mixing these incorrectly can distort the layout hierarchy.
+- When defining new components with event props, ensure `get_event_triggers` is correct so event handlers bind properly.
+
+### Var (`reflex.vars.base.Var`)
+
+**Capability**: Represents reactive values in the UI tree.
+
+**Key Methods**:
+- `equals(other: Var) -> bool`
+- `create(value, _var_data=None) -> Var`
+- `to(output_type, var_type=None) -> Var` – Casts to another type (e.g. `.to(int)`, `.to(str)`).
+- `guess_type()` – Infers the var type.
+- `bool() -> BooleanVar` – Boolean conversion.
+- `is_none() -> BooleanVar` / `is_not_none() -> BooleanVar`
+- `to_string(use_json=True) -> StringVar` – String representation.
+- `js_type() -> StringVar` – JavaScript `typeof`.
+- `range(first_endpoint, second_endpoint=None, step=None)` – Produces numeric ranges.
+
+```python
+class CounterState(rx.State):
+    count: int = 0
+
+    def increment(self):
+        self.count += 1
+
+
+def index() -> rx.Component:
+    return rx.button(
+        "Count: " + CounterState.count.to_string(),
+        on_click=CounterState.increment,
+    )
+```
+
+**Var Gotchas**:
+- Avoid Python `if` on `Var` values in component trees; use `rx.cond` and Var predicates (`is_none`, etc.).
+- Cast types explicitly when concatenating or performing numeric operations.
+
+### Model (`reflex.model.Model`)
+
+**Capability**: SQLModel/SQLAlchemy integration for database tables and migrations.
+
+**Core Methods**:
+- `create_all()` – Create all tables.
+- `get_db_engine()` – Access underlying SQLAlchemy engine.
+- `alembic_init()` – Initialize Alembic for migrations.
+- `get_migration_history()` – Inspect migration history.
+- `alembic_autogenerate(connection, message=None, write_migration_scripts=True) -> bool` – Autogenerate migration scripts.
+- `migrate(autogenerate: bool = False) -> bool | None` – Apply Alembic migrations.
+- `select()` – Build a query for the model.
+
+```python
+class Post(rx.Model, table=True):
+    title: str
+    content: str
+
+
+class BlogState(rx.State):
+    def add_post(self, title: str, content: str):
+        with rx.session() as session:
+            session.add(Post(title=title, content=content))
+            session.commit()
+```
+
+### Event (`reflex.event.Event`)
+
+**Capability**: Low-level representation of state change requests.
+
+**Fields**:
+- `token: str` – Identifies the client.
+- `name: str` – Event name (e.g. `state.method_name`).
+- `router_data: dict` – Routing info at the time of the event.
+- `payload: dict` – Payload from the frontend.
+
+LLM usage typically focuses on declaring event handlers on state classes and wiring them via component props such as `on_click`, `on_change`, and `on_submit`.
+
+### Config (`reflex.config.Config` / `rxconfig.py`)
+
+**Capability**: Central configuration for runtime behavior and deployment.
+
+**Key Areas**:
+- App settings: `app_name`, `loglevel`, `telemetry_enabled`.
+- Server: `frontend_port`, `frontend_path`, `backend_port`, `api_url`, `deploy_url`, `backend_host`.
+- Database: `db_url`, `async_db_url`, `redis_url`.
+- Frontend: `frontend_packages`, `react_strict_mode`, `show_built_with_reflex`.
+- State management: `state_manager_mode`, `state_auto_setters`, Redis lock/token settings.
+- Plugins: `plugins`, `disable_plugins`.
+- Misc: `env_file`, `transport`, `bun_path`, `static_page_generation_timeout`.
+
+**Environment Overrides**:
+- Any config field can be overridden by environment variables in the form `REFLEX_<FIELD_NAME_IN_UPPERCASE>`, e.g. `REFLEX_DB_URL`, `REFLEX_FRONTEND_PORT`.
+
+```python
+# rxconfig.py
+import reflex as rx
+
+
+config = rx.Config(
+    app_name="blog_app",
+    db_url="sqlite:///blog.db",
+    telemetry_enabled=False,
+    cors_allowed_origins=["http://localhost:3000"],
+)
+```
+
+### CLI (`reflex` command)
+
+**Capability**: Project scaffolding, dev server, export, and cloud tools.
+
+**Common Commands**:
+- `reflex init` – Initialize or update a Reflex app in the current directory.
+- `reflex run` – Run the app (dev mode by default with hot reload).
+- `reflex export` – Build exportable frontend/backend bundles.
+- `reflex rename` – Rename the app based on config.
+- `reflex cloud ...` – Manage Reflex Cloud apps, projects, secrets.
+- `reflex script ...` – Run helper scripts.
+
+```bash
+reflex init
+reflex run
+reflex export
+```
+
+**CLI Gotchas**:
+- `reflex run` uses development mode by default; use appropriate flags (e.g. `--env prod`) for production-like runs.
+- `reflex export` builds a static frontend and a backend bundle; deployment still requires hosting the backend.
+- CLI commands depend on a valid `rxconfig.py` and `app_name` matching the app directory.
+
 ## References
 
 ### Documentation
