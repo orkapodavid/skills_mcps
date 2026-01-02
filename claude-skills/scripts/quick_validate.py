@@ -1,19 +1,115 @@
 #!/usr/bin/env python3
 """
-Quick validation script for skills - minimal version
+Quick validation script for skills.
+Enforces strict schema compliance for SKILL.md frontmatter.
 """
 
 import re
 import sys
 from pathlib import Path
+from typing import Dict, Any, Tuple, Optional, Set, List
 
 import yaml
 
 MAX_SKILL_NAME_LENGTH = 64
 
+# Define schema for frontmatter validation
+# Type definitions: 'str', 'list[str]', 'dict'
+SCHEMA: Dict[str, Dict[str, Any]] = {
+    "name": {
+        "type": "str",
+        "required": True,
+        "pattern": r"^[a-z0-9-]+$",
+        "max_length": MAX_SKILL_NAME_LENGTH
+    },
+    "description": {
+        "type": "str",
+        "required": True,
+        "max_length": 1024,
+        "no_angle_brackets": True
+    },
+    "version": {
+        "type": "str",
+        "required": False,
+        "pattern": r"^\d+\.\d+\.\d+$"  # Simple semantic versioning
+    },
+    "authors": {
+        "type": "list[str]",
+        "required": False
+    },
+    "license": {
+        "type": "str",
+        "required": False
+    },
+    "allowed-tools": {
+        "type": "str",  # Sometimes list, but SKILL.md usually uses space-separated string or just string description
+        "required": False
+    },
+    "compatibility": {
+        "type": "str",
+        "required": False
+    },
+    "depends-on": {
+        "type": "list[str]",
+        "required": False
+    },
+    "related-skills": {
+        "type": "list[str]",
+        "required": False
+    },
+    "metadata": {
+        "type": "dict",
+        "required": False
+    },
+    "short-description": {
+        "type": "str",
+        "required": False,
+        "max_length": 120
+    }
+}
 
-def validate_skill(skill_path):
-    """Basic validation of a skill"""
+def validate_value(key: str, value: Any, rules: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """Validates a single value against its schema rules."""
+
+    # Type check
+    expected_type = rules.get("type")
+    if expected_type == "str" and not isinstance(value, str):
+        return False, f"'{key}' must be a string"
+    if expected_type == "list[str]":
+        if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+            return False, f"'{key}' must be a list of strings"
+    if expected_type == "dict" and not isinstance(value, dict):
+        return False, f"'{key}' must be a dictionary"
+
+    if isinstance(value, str):
+        value = value.strip()
+
+        # Pattern check
+        pattern = rules.get("pattern")
+        if pattern and not re.match(pattern, value):
+             # Specific error for name format
+            if key == "name":
+                return False, f"'{key}' format invalid. Must be lowercase, digits, and hyphens only."
+            return False, f"'{key}' does not match pattern {pattern}"
+
+        # Max length
+        max_length = rules.get("max_length")
+        if max_length and len(value) > max_length:
+            return False, f"'{key}' exceeds maximum length of {max_length}"
+
+        # Specific check for angle brackets
+        if rules.get("no_angle_brackets") and ("<" in value or ">" in value):
+            return False, f"'{key}' cannot contain angle brackets (< or >)"
+
+        # Name specific checks
+        if key == "name":
+             if value.startswith("-") or value.endswith("-") or "--" in value:
+                return False, f"'{key}' cannot start/end with hyphen or contain consecutive hyphens"
+
+    return True, None
+
+def validate_skill(skill_path: str) -> Tuple[bool, str]:
+    """Validates a skill directory against the schema."""
     skill_path = Path(skill_path)
 
     skill_md = skill_path / "SKILL.md"
@@ -22,7 +118,7 @@ def validate_skill(skill_path):
 
     content = skill_md.read_text()
     if not content.startswith("---"):
-        return False, "No YAML frontmatter found"
+        return False, "No YAML frontmatter found (must start with ---)"
 
     match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     if not match:
@@ -37,73 +133,30 @@ def validate_skill(skill_path):
     except yaml.YAMLError as e:
         return False, f"Invalid YAML in frontmatter: {e}"
 
-    allowed_properties = {
-        "name",
-        "description",
-        "license",
-        "allowed-tools",
-        "metadata",
-        "compatibility",
-        "depends-on",
-        "related-skills",
-        "version",
-        "authors",
-        "short-description",
-    }
+    # Check for unexpected keys
+    allowed_keys = set(SCHEMA.keys())
+    actual_keys = set(frontmatter.keys())
+    unexpected_keys = actual_keys - allowed_keys
 
-    unexpected_keys = set(frontmatter.keys()) - allowed_properties
     if unexpected_keys:
-        allowed = ", ".join(sorted(allowed_properties))
-        unexpected = ", ".join(sorted(unexpected_keys))
-        return (
-            False,
-            f"Unexpected key(s) in SKILL.md frontmatter: {unexpected}. Allowed properties are: {allowed}",
-        )
+        return False, f"Unexpected key(s): {', '.join(sorted(unexpected_keys))}. Allowed: {', '.join(sorted(allowed_keys))}"
 
-    if "name" not in frontmatter:
-        return False, "Missing 'name' in frontmatter"
-    if "description" not in frontmatter:
-        return False, "Missing 'description' in frontmatter"
+    # Check required keys and validate values
+    for key, rules in SCHEMA.items():
+        # Check required
+        if rules.get("required") and key not in frontmatter:
+            return False, f"Missing required field: '{key}'"
 
-    name = frontmatter.get("name", "")
-    if not isinstance(name, str):
-        return False, f"Name must be a string, got {type(name).__name__}"
-    name = name.strip()
-    if name:
-        if not re.match(r"^[a-z0-9-]+$", name):
-            return (
-                False,
-                f"Name '{name}' should be hyphen-case (lowercase letters, digits, and hyphens only)",
-            )
-        if name.startswith("-") or name.endswith("-") or "--" in name:
-            return (
-                False,
-                f"Name '{name}' cannot start/end with hyphen or contain consecutive hyphens",
-            )
-        if len(name) > MAX_SKILL_NAME_LENGTH:
-            return (
-                False,
-                f"Name is too long ({len(name)} characters). "
-                f"Maximum is {MAX_SKILL_NAME_LENGTH} characters.",
-            )
-
-    description = frontmatter.get("description", "")
-    if not isinstance(description, str):
-        return False, f"Description must be a string, got {type(description).__name__}"
-    description = description.strip()
-    if description:
-        if "<" in description or ">" in description:
-            return False, "Description cannot contain angle brackets (< or >)"
-        if len(description) > 1024:
-            return (
-                False,
-                f"Description is too long ({len(description)} characters). Maximum is 1024 characters.",
-            )
+        # Validate value if present
+        if key in frontmatter:
+            valid, error = validate_value(key, frontmatter[key], rules)
+            if not valid:
+                return False, error
 
     return True, "Skill is valid!"
 
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) != 2:
         print("Usage: python quick_validate.py <skill_directory>")
         sys.exit(1)
@@ -111,3 +164,6 @@ if __name__ == "__main__":
     valid, message = validate_skill(sys.argv[1])
     print(message)
     sys.exit(0 if valid else 1)
+
+if __name__ == "__main__":
+    main()
