@@ -1,5 +1,5 @@
 ---
-name: cli
+name: prefect-cli
 description: Prefect CLI commands for mutations. The MCP server is read-only - use this skill when you need to trigger deployments, cancel flow runs, create automations, or modify Prefect resources.
 ---
 

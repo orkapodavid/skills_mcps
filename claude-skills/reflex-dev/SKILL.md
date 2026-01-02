@@ -660,3 +660,48 @@ See `references/patterns.md` for detailed examples of:
 - Complex form validation
 - Multi-step workflows
 - Data visualization with charts
+
+## Additional Resources
+
+### Reference Files
+
+For comprehensive technical specifications and advanced patterns, consult the following reference files in `references/`:
+
+**Core Framework & Configuration:**
+- **`reflex-framework-base.mdc`** – Core framework concepts, architecture, and initialization patterns
+- **`reflex-app-config.mdc`** – Application configuration, rxconfig.py settings, and deployment options
+- **`reflex-cli-env-utils.mdc`** – CLI commands, environment management, and build utilities
+
+**State & Data Management:**
+- **`reflex-state-model.mdc`** – State management patterns, computed vars, and state composition
+- **`reflex-state-structure.mdc`** – State architecture, substates, and state organization strategies
+- **`reflex-var-system.mdc`** – Var system, reactive values, type conversions, and Var operations
+
+**Components & UI:**
+- **`reflex-components-base.mdc`** – Base component APIs, custom components, and component composition
+- **`reflex-layout.mdc`** – Layout components (Box, Stack, Grid, Flex, Container)
+- **`reflex-typography.mdc`** – Text components (Heading, Text, Code, Markdown)
+- **`reflex-forms.mdc`** – Form components, validation patterns, and form state management
+- **`reflex-data-display.mdc`** – Data display components and visualization patterns
+- **`reflex-tables.mdc`** – Table components, data tables, and tabular data patterns
+- **`reflex-overlay.mdc`** – Modal, Dialog, Popover, Tooltip, and overlay components
+- **`reflex-disclosure-media-utils.mdc`** – Accordion, Tabs, Collapse, Image, Video, and media components
+- **`reflex-browser-apis.mdc`** – Browser APIs, local storage, cookies, and client-side utilities
+
+**Events & Interactions:**
+- **`reflex-events-handlers.mdc`** – Event handler patterns, async events, and event chaining
+- **`reflex-dynamic-rendering.mdc`** – Conditional rendering, dynamic components, and rx.cond patterns
+
+**Charts & Visualization:**
+- **`reflex-charts.mdc`** – Chart components and data visualization patterns
+- **`reflex-agchart.mdc`** – AG Charts integration and advanced charting
+- **`reflex-aggrid.mdc`** – AG Grid integration for enterprise data tables
+
+**Advanced Topics:**
+- **`reflex-dashboard.mdc`** – Dashboard patterns, layouts, and best practices
+- **`reflex-azure-auth.mdc`** – Azure authentication integration patterns
+- **`reflex-enterprise.mdc`** – Enterprise patterns, scalability, and production deployment
+- **`reflex-tests.mdc`** – Testing strategies, unit tests, and integration testing patterns
+
+**Common Patterns:**
+- **`patterns.md`** – Curated collection of authentication flows, real-time updates, form validation, multi-step workflows, and data visualization examples
