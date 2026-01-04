@@ -2,7 +2,15 @@
 
 This reference provides detailed examples of common patterns in Reflex applications.
 
+> **Note:** For deep dives into specific topics, refer to the core documentation files:
+> - **State & Auth:** `reflex-state-model.mdc`, `reflex-azure-auth.mdc`
+> - **Forms:** `reflex-forms.mdc`
+> - **Events:** `reflex-events-handlers.mdc`
+> - **UI & Layout:** `reflex-components-base.mdc`, `reflex-layout.mdc`
+
 ## Authentication Flows
+
+*Related Reference: `reflex-azure-auth.mdc` (for Azure AD integration)*
 
 ### Basic Authentication with Session State
 
@@ -97,6 +105,8 @@ def admin_page():
 
 ## Real-Time Updates
 
+*Related Reference: `reflex-events-handlers.mdc` (Async Events)*
+
 ### WebSocket State Updates
 
 ```python
@@ -189,6 +199,8 @@ def auto_refresh_page():
 ```
 
 ## Complex Form Validation
+
+*Related Reference: `reflex-forms.mdc`*
 
 ### Multi-Step Form
 
@@ -410,6 +422,8 @@ def dependent_form():
 
 ## Data Visualization with Charts
 
+*Related Reference: `reflex-charts.mdc`*
+
 ### Interactive Dashboard
 
 ```python
@@ -488,6 +502,8 @@ def dashboard():
 ```
 
 ## Database Patterns
+
+*Related Reference: `reflex-state-model.mdc` (for `rx.Model` and ORM integration)*
 
 ### DuckDB Integration
 
@@ -578,6 +594,8 @@ class DataProcessingState(rx.State):
 ```
 
 ## Advanced Component Patterns
+
+*Related Reference: `reflex-components-base.mdc`, `reflex-custom-components.mdc`*
 
 ### Reusable Data Card
 
@@ -679,6 +697,8 @@ def modal_dialog():
 ```
 
 ## Performance Optimization
+
+*Related Reference: `reflex-state-model.mdc` (Performance Best Practices)*
 
 ### Lazy Loading Pattern
 
