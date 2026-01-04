@@ -1,5 +1,5 @@
 ---
-description: Expert guidance for Reflex Var system - reactive variables, type system, operations, and ImportVar
+description: Comprehensive guide to Reflex Var system - reactive variables, type system, operations, custom types, and ImportVar
 globs: ["**/*.py"]
 ---
 
@@ -12,6 +12,98 @@ globs: ["**/*.py"]
 - Vars support type-safe operations (arithmetic, comparisons, etc.)
 - ImportVar manages JavaScript imports for custom functionality
 - Var system enables Python-to-JavaScript conversion
+
+## Base Vars & State Variables
+
+Base vars are defined as fields in your `State` class. They can have default values or type annotations.
+
+### Basic State Definition
+
+```python
+import reflex as rx
+
+class AppState(rx.State):
+    """Main application state."""
+    # Type annotations required if no default value provided
+    count: int = 0
+    username: str = "Guest"
+    is_active: bool = False
+
+    # Complex types need type hints
+    items: list[str] = []
+    settings: dict[str, str] = {}
+```
+
+### Backend-Only Vars
+
+Vars starting with underscore (`_`) are **backend-only** and are not synchronized to the frontend.
+
+**Use Cases:**
+- Store sensitive data (auth tokens, API keys)
+- Large data structures not directly rendered
+- Non-JSON-serializable objects (must be pickle-able for Redis)
+
+```python
+class BackendState(rx.State):
+    _api_key: str = "secret_key"  # Not sent to client
+    _user_cache: dict = {}        # Not sent to client
+
+    # Public var exposed to client
+    is_authenticated: bool = False
+
+    def check_auth(self):
+        # Can access backend vars in event handlers
+        if self._api_key:
+            self.is_authenticated = True
+```
+
+### Using `rx.Field`
+
+Use `rx.Field[T]` annotation with `rx.field(default_value)` for improved IDE support and type checking.
+
+```python
+class State(rx.State):
+    # Better autocomplete support
+    is_visible: rx.Field[bool] = rx.field(True)
+    user_data: rx.Field[dict[str, Any]] = rx.field({})
+```
+
+## Custom Vars (Complex Types)
+
+For complex data structures beyond primitives, use **dataclasses**, **TypedDict**, or **Pydantic models**. All state variables sent to the frontend must be JSON-serializable.
+
+### Using Dataclasses (Recommended)
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class User:
+    name: str
+    email: str
+    age: int
+
+class UserState(rx.State):
+    current_user: User = User(name="Alice", email="alice@example.com", age=30)
+
+    def update_email(self, new_email: str):
+        # Update field (immutable update under the hood)
+        self.current_user.email = new_email
+```
+
+### Using Pydantic Models
+
+Reflex uses Pydantic models internally (`rx.Base` inherits from Pydantic `BaseModel`).
+
+```python
+class Product(rx.Model):
+    name: str
+    price: float
+    in_stock: bool
+
+class ShopState(rx.State):
+    products: list[Product] = []
+```
 
 ## Var Class (reflex.vars.base.Var)
 
