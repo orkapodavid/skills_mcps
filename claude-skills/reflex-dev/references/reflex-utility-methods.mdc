@@ -1,0 +1,84 @@
+# Reflex Utility Methods
+
+## Router Attributes
+
+Access via `self.router` in state:
+
+### Page Data (`self.router.page`)
+```python
+self.router.page.host          # Hostname:port (frontend)
+self.router.page.path          # Current path (with slug for dynamic)
+self.router.page.raw_path      # Path in browser (with params)
+self.router.page.full_path     # path with host
+self.router.page.full_raw_path # raw_path with host
+self.router.page.params        # Dict of query params
+
+Session Data (self.router.session)
+python
+
+self.router.session.client_token  # UUID for current tab
+self.router.session.session_id    # Websocket session ID
+self.router.session.client_ip     # Client IP address
+Headers (self.router.headers)
+python
+
+self.router.headers.host
+self.router.headers.origin
+self.router.headers.user_agent
+self.router.headers.cookie
+self.router.headers.accept_language
+self.router.headers.raw_headers  # All headers as frozen dict
+Accessing Raw Headers
+python
+
+def get_custom_header(self):
+    return self.router.headers.raw_headers.get("x-custom-header", "")
+Lifespan Tasks
+Coroutines that run when the backend server is running. Useful for:
+Initial global state setup
+Periodic tasks
+Resource cleanup on shutdown
+Async Task
+python
+
+async def my_background_task(app):
+    while True:
+        try:
+            await asyncio.sleep(60)
+            # Do periodic work
+        except asyncio.CancelledError:
+            # Cleanup on shutdown
+            break
+
+app.register_lifespan_task(my_background_task)
+Context Manager
+python
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan_db(app):
+    # Startup
+    db = await create_db_connection()
+    yield
+    # Shutdown
+    await db.close()
+
+app.register_lifespan_task(lifespan_db)
+Note: Never use time.sleep or blocking I/O in lifespan tasks.
+Other State Methods
+python
+
+# Reset all vars to defaults
+self.reset()
+
+# Get var value without tracking (for serialization)
+value = self.get_value(self.my_var)
+
+# Get state as dictionary
+state_dict = self.dict()
+Special Attributes
+python
+
+# Set of modified var names since last client sync
+self.dirty_vars

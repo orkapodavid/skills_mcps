@@ -1,0 +1,166 @@
+# Reflex Drag and Drop Documentation
+
+> Comprehensive drag and drop functionality for Reflex Enterprise using the `rxe.dnd` module. Built on react-dnd.
+
+⚠️ **Important:** Always decorate functions defining `rxe.dnd.draggable` components with `@rx.memo` to avoid compilation errors.
+
+---
+
+## Core Components
+
+### `rxe.dnd.draggable`
+
+Makes any element draggable.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `type` | `str` (required) | String identifier that must match the `accept` list of drop targets |
+| `item` | `dict \| Callable` | Data object passed to drop handlers. Can be static dict or function receiving `DragSourceMonitor` |
+| `preview_options` | `dict` | Configuration for drag preview appearance |
+| `options` | `dict` | Additional drag source options like `dropEffect` |
+| `on_end` | `EventHandler` | Called when drag operation completes |
+| `can_drag` | `Callable` | Function that determines if item can be dragged |
+| `is_dragging` | `Callable` | Function to override default dragging state detection |
+| `collect` | `Callable` | Function to collect custom properties from drag monitor |
+
+### `rxe.dnd.drop_target`
+
+Creates areas that accept draggable items.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `accept` | `str \| list[str]` (required) | Drag type(s) this target accepts |
+| `options` | `dict` | Additional drop target configuration |
+| `on_drop` | `EventHandler` | Called when item is dropped, receives `item` data |
+| `on_hover` | `EventHandler` | Called when item hovers over target |
+| `can_drop` | `Callable` | Function that determines if specific item can be dropped |
+| `collect` | `Callable` | Function to collect custom properties from drop monitor |
+
+### `rxe.dnd.provider`
+
+Wraps your app to enable drag and drop. Automatically added when using `draggable` or `drop_target` components.
+
+```python
+# Manual control:
+rxe.dnd.provider(
+    # your components here
+)
+```
+
+---
+
+## Collected Parameters
+
+Access real-time drag/drop state information.
+
+### `rxe.dnd.Draggable.collected_params`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `is_dragging` | `bool` | Whether item is currently being dragged |
+
+### `rxe.dnd.DropTarget.collected_params`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `is_over` | `bool` | Whether draggable is hovering over target |
+| `can_drop` | `bool` | Whether drop is allowed |
+
+---
+
+## Monitor Classes
+
+### `DragSourceMonitor`
+
+Provides information about drag operation state:
+
+| Method | Description |
+|--------|-------------|
+| `is_dragging()` | Returns `True` if item is currently being dragged |
+| `can_drag()` | Returns `True` if item can be dragged |
+| `get_item()` | Returns the item data being dragged |
+| `get_item_type()` | Returns the drag type string |
+| `get_drop_result()` | Returns drop result (available in `on_end`) |
+| `did_drop()` | Returns `True` if item was successfully dropped |
+
+### `DropTargetMonitor`
+
+Provides information about drop target state:
+
+| Method | Description |
+|--------|-------------|
+| `is_over()` | Returns `True` if draggable is hovering over target |
+| `can_drop()` | Returns `True` if hovering item can be dropped |
+| `get_item()` | Returns item data of hovering draggable |
+| `get_item_type()` | Returns drag type of hovering item |
+
+---
+
+## Usage Patterns
+
+### Simple Drag and Drop
+
+Basic draggable item with drop target:
+- Create `rxe.dnd.draggable` with `type` and `item`
+- Create `rxe.dnd.drop_target` with matching `accept` and `on_drop` handler
+
+### Multi-Position Drag and Drop
+
+Move items between multiple drop targets:
+- Single draggable with position state
+- Multiple drop targets with unique identifiers
+- Update position in `on_drop` handler
+
+### State Tracking
+
+Access drag/drop state using collected parameters:
+- Use `rxe.dnd.Draggable.collected_params.is_dragging` for drag state
+- Use `rxe.dnd.DropTarget.collected_params.is_over` and `.can_drop` for drop state
+
+### Dynamic Lists
+
+Create draggable lists with `rx.foreach`:
+- Map over list items to create draggables
+- Handle reordering in drop handlers
+
+### Data Passing
+
+Pass data via `item` parameter:
+```python
+rxe.dnd.draggable(
+    type="card",
+    item={"id": 1, "name": "Item 1", "data": {...}}
+)
+```
+
+### Custom Collect Functions
+
+Access real-time monitor state:
+```python
+rxe.dnd.draggable(
+    type="item",
+    collect=lambda monitor: {
+        "is_dragging": monitor.is_dragging(),
+        "can_drag": monitor.can_drag()
+    }
+)
+```
+
+---
+
+## Best Practices
+
+1. **Always use `@rx.memo`** on functions containing draggable components
+2. **Use descriptive type names** for better debugging
+3. **Handle edge cases** in drop handlers (invalid items, etc.)
+4. **Provide visual feedback** using collected parameters
+5. **Test on mobile devices** with touch backend
+6. **Keep item data lightweight** for better performance
+
+---
+
+*Source: [Reflex Enterprise Drag and Drop Documentation](https://reflex.dev/docs/enterprise/drag-and-drop/)*

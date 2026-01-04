@@ -1,0 +1,470 @@
+# Reflex Mantine Documentation
+
+> Mantine components integrated into Reflex Enterprise via the `rxe.mantine` module. High-quality, flexible, and customizable components.
+
+**Note:** Props from Mantine documentation should be passed in `snake_case` format.
+
+---
+
+## Components
+
+### `rxe.mantine.autocomplete`
+
+Provides suggestions as the user types.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+def autocomplete_example():
+    return rx.vstack(
+        rxe.mantine.autocomplete(
+            data=["Apple", "Banana", "Cherry", "Date", "Elderberry"],
+            placeholder="Type a fruit",
+            label="Fruit Autocomplete",
+            description="Select a fruit from the list",
+        ),
+    )
+```
+
+---
+
+### `rxe.mantine.collapse`
+
+Creates collapsible sections based on user interaction.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class CollapseState(rx.State):
+    is_open: bool = False
+
+    @rx.event
+    def toggle_collapse(self):
+        self.is_open = not self.is_open
+
+def collapse_example():
+    return rx.vstack(
+        rxe.mantine.collapse(
+            rx.text(
+                "This is a collapsible section. Click the button to toggle the collapse.",
+                font_size="lg",
+            ),
+            in_=CollapseState.is_open,
+            label="Collapsible Section",
+            description="Click the button to toggle the collapse.",
+        ),
+        rx.button(
+            "Toggle Collapse",
+            on_click=lambda: CollapseState.toggle_collapse,
+        ),
+    )
+```
+
+---
+
+### `rxe.mantine.json_input`
+
+Input component for JSON data with validation and formatting.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class JsonInputState(rx.State):
+    json_data: str = ""
+
+    def set_json_data(self, value: str):
+        self.json_data = value
+
+def json_input_example():
+    return rxe.mantine.json_input(
+        id="json-input",
+        value=JsonInputState.json_data,
+        placeholder="Enter JSON data",
+        label="JSON Input",
+        description="Please enter valid JSON data.",
+        required=True,
+        size="md",
+        format_on_blur=True,
+        on_change=JsonInputState.set_json_data,
+        width="300px",
+    )
+```
+
+---
+
+### `rxe.mantine.loading_overlay`
+
+Displays a loading overlay on top of children, preventing interaction.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class LoadingOverlayState(rx.State):
+    loading: bool = False
+
+    @rx.event
+    def toggle_loading(self):
+        self.loading = not self.loading
+
+def loading_overlay_example():
+    return (
+        rx.container(
+            rxe.mantine.loading_overlay(
+                rx.text(
+                    "Loading Overlay Example",
+                    height="200px",
+                    width="100px",
+                ),
+                visible=LoadingOverlayState.loading,
+                z_index=1000,
+            ),
+        ),
+        rx.button("Toggle Loading", on_click=LoadingOverlayState.toggle_loading),
+    )
+```
+
+---
+
+### `rxe.mantine.multi_select`
+
+Select multiple options from a list.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class MultiSelectState(rx.State):
+    selected_fruits: list = []
+
+    def set_selected_fruits(self, value: list):
+        self.selected_fruits = value
+
+def multi_select_example():
+    return rx.vstack(
+        rxe.mantine.multi_select(
+            label="Select fruits",
+            placeholder="Pick all that you like",
+            data=["Apple", "Banana", "Cherry", "Date", "Elderberry"],
+            value=MultiSelectState.selected_fruits,
+            on_change=MultiSelectState.set_selected_fruits,
+        )
+    )
+```
+
+---
+
+### `rxe.mantine.number_formatter`
+
+Formats numbers with prefixes, suffixes, and separators.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+def number_formatter_example():
+    return rx.vstack(
+        rxe.mantine.number_formatter(
+            value=100,
+            prefix="$",
+        ),
+        rxe.mantine.number_formatter(
+            value=100,
+            suffix="€",
+        ),
+        rxe.mantine.number_formatter(
+            value=1234567.89,
+            thousand_separator=True,
+        ),
+    )
+```
+
+---
+
+### `rxe.mantine.pill`
+
+Displays small pieces of information like tags or labels.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+def pill_page():
+    return rxe.mantine.pill(
+        "Pill",
+        color="blue",
+        size="md",
+        variant="outline",
+        radius="xl",
+        with_remove_button=True,
+        on_remove=lambda: rx.toast("Pill on_remove triggered"),
+    )
+```
+
+#### `rxe.mantine.pill.group`
+
+Groups multiple pills together.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+def pill_group_page():
+    return rxe.mantine.pill.group(
+        rxe.mantine.pill("Pill 1"),
+        rxe.mantine.pill("Pill 2"),
+    )
+```
+
+---
+
+### `rxe.mantine.pills_input`
+
+Utility component for displaying tags/labels. No built-in logic - renders children only.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class PillInputState(rx.State):
+    tags: set = {"Foo", "Bar"}
+
+    @rx.event
+    def add_tag(self, tag: str):
+        self.tags.add(tag)
+
+    @rx.event
+    def remove_tag(self, tag: str):
+        self.tags.remove(tag)
+
+def pills_input_page():
+    return rxe.mantine.pills_input(
+        rxe.mantine.pill.group(
+            rx.foreach(
+                PillInputState.tags,
+                lambda tag: rxe.mantine.pill(
+                    tag,
+                    with_remove_button=True,
+                    on_remove=PillInputState.remove_tag(tag),
+                ),
+            ),
+            rxe.mantine.pills_input.field(
+                placeholder="Enter tags",
+            ),
+        ),
+        label="PillsInput",
+        id="pills-input",
+        value=["tag1", "tag2"],
+    )
+```
+
+---
+
+### `rxe.mantine.tags_input`
+
+Fully functional tag input component.
+
+**Basic Example:**
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+def tags_input_simple_page():
+    return rxe.mantine.tags_input(
+        placeholder="Enter tags",
+        label="Press Enter to add a tag",
+    )
+```
+
+**State Example:**
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class TagsInputState(rx.State):
+    tags: list[str] = ["Tag1", "Tag2"]
+
+    @rx.event
+    def update_tags(self, tags: list[str]):
+        self.tags = tags
+
+def tags_input_page():
+    return rxe.mantine.tags_input(
+        value=TagsInputState.tags,
+        on_change=TagsInputState.update_tags,
+        placeholder="Enter tags",
+        label="TagsInput",
+        description="This is a TagsInput component",
+        error="",
+        size="md",
+        radius="xl",
+    )
+```
+
+---
+
+### `rxe.mantine.ring_progress`
+
+Displays progress in a circular format.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+import random
+
+class RingProgressState(rx.State):
+    value: int = 50
+
+    @rx.event
+    def random(self):
+        self.value = random.randint(0, 100)
+
+def ring_progress_example():
+    return rx.vstack(
+        rxe.mantine.ring_progress(
+            size=100,
+            sections=[
+                {"value": RingProgressState.value, "color": "blue"},
+            ],
+        ),
+        rx.button("Randomize", on_click=RingProgressState.random),
+    )
+```
+
+---
+
+### `rxe.mantine.semi_circle_progress`
+
+Displays progress in a semi-circular format.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+import random
+
+class SemiCircleProgressState(rx.State):
+    value: int = 50
+
+    @rx.event
+    def random(self):
+        self.value = random.randint(0, 100)
+
+def semi_circle_progress_example():
+    return rx.vstack(
+        rxe.mantine.semi_circle_progress(
+            size=100,
+            value=SemiCircleProgressState.value,
+        ),
+        rx.button("Randomize", on_click=SemiCircleProgressState.random),
+    )
+```
+
+---
+
+### `rxe.mantine.spoiler`
+
+Hide or reveal content with expand/collapse functionality.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+def spoiler_example():
+    return rx.vstack(
+        rxe.mantine.spoiler(
+            "This is a spoiler zone where lorem ipsum text dolor sit amet...",
+            max_height=50,
+            show_label="Show more",
+            hide_label="Show less",
+        ),
+    )
+```
+
+---
+
+### `rxe.mantine.timeline`
+
+Displays a sequence of events/milestones in linear format.
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+def timeline_example():
+    return rx.vstack(
+        rxe.mantine.timeline(
+            rxe.mantine.timeline.item(
+                title="Step 1",
+                bullet="•",
+            ),
+            rxe.mantine.timeline.item(
+                title="Step 2",
+                bullet="•",
+            ),
+            rxe.mantine.timeline.item(
+                title="Step 3",
+                bullet="•",
+            ),
+            active=1,
+            bullet_size=24,
+            line_width=2,
+            color="blue",
+        )
+    )
+```
+
+---
+
+### `rxe.mantine.tree`
+
+Displays hierarchical data in a tree structure with expand/collapse.
+
+⚠️ **Limitation:** Only supports 5 levels of depth for the `data` prop (pydantic constraint).
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+def tree_example():
+    return rxe.mantine.tree(
+        data=[
+            {
+                "value": "0",
+                "label": "Root",
+                "children": [
+                    {"value": "0-1", "label": "Child 1"},
+                    {"value": "0-2", "label": "Child 2"},
+                ],
+            }
+        ],
+    )
+```
+
+---
+
+## Component Summary
+
+| Component | Module | Purpose |
+|-----------|--------|---------|
+| Autocomplete | `rxe.mantine.autocomplete` | Type-ahead suggestions |
+| Collapse | `rxe.mantine.collapse` | Collapsible sections |
+| JSON Input | `rxe.mantine.json_input` | JSON data input with validation |
+| Loading Overlay | `rxe.mantine.loading_overlay` | Loading state overlay |
+| Multi Select | `rxe.mantine.multi_select` | Multiple option selection |
+| Number Formatter | `rxe.mantine.number_formatter` | Number formatting |
+| Pill | `rxe.mantine.pill` | Tag/label display |
+| Pill Group | `rxe.mantine.pill.group` | Grouped pills |
+| Pills Input | `rxe.mantine.pills_input` | Tag input container |
+| Tags Input | `rxe.mantine.tags_input` | Full-featured tag input |
+| Ring Progress | `rxe.mantine.ring_progress` | Circular progress |
+| Semi Circle Progress | `rxe.mantine.semi_circle_progress` | Semi-circular progress |
+| Spoiler | `rxe.mantine.spoiler` | Expandable content |
+| Timeline | `rxe.mantine.timeline` | Event sequence display |
+| Tree | `rxe.mantine.tree` | Hierarchical data (max 5 levels) |
+
+---
+
+*Source: [Reflex Enterprise Mantine Documentation](https://reflex.dev/docs/enterprise/mantine/)*

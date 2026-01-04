@@ -1,0 +1,289 @@
+Here's the compiled markdown documentation for Reflex React Flow:
+
+---
+
+# Reflex React Flow Documentation
+
+> A comprehensive guide for building interactive flow diagrams with Reflex Enterprise's React Flow integration (`rxe.flow`).
+
+---
+
+## Overview
+
+A flow diagram is an interactive graph composed of **nodes** connected by **edges**.
+
+### Core Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Nodes** | Building blocks of a flow. Can include interactive elements, dynamic data, and multiple connection points. |
+| **Handles** | Connection points on nodes where edges attach. Can be positioned on top, bottom, left, or right. |
+| **Edges** | Connections between nodes. Require a source and target node. Support styling, animation, and custom routing. |
+| **Connection Line** | Placeholder edge shown while dragging from one handle to another. |
+| **Viewport** | Visible area containing the flow. Supports panning and zooming. |
+
+---
+
+## Components
+
+### `rxe.flow.provider`
+
+Context provider for accessing flow state outside `<ReactFlow />`.
+
+**Props:**
+- `initial_nodes: Sequence[Node]` - Initial nodes (not dynamic)
+- `default_edges: Sequence[Edge]` - Initial edges (not dynamic)
+- `initial_width: float` - Initial width for server-side fitView
+- `initial_height: float` - Initial height for server-side fitView
+- `fit_view: bool` - Auto-zoom/pan to fit nodes
+- `initial_fit_view_options: FitViewOptions` - Customize fitView behavior
+- `initial_min_zoom: float` - Minimum zoom level
+- `initial_max_zoom: float` - Maximum zoom level
+- `node_origin: NodeOrigin` - Origin point for node positioning
+- `node_extent: CoordinateExtent` - Boundary for node movement
+
+### `rxe.flow`
+
+Main component that renders the flow.
+
+**Props:**
+- `nodes: Sequence[Node]` - Nodes for controlled flow
+- `edges: Sequence[Edge]` - Edges for controlled flow
+- `default_nodes: Sequence[Node]` - Initial nodes for uncontrolled flow
+- `default_edges: Sequence[Edge]` - Initial edges for uncontrolled flow
+- `node_types: Mapping[str, Any]` - Custom node types
+- `edge_types: Mapping[str, Any]` - Custom edge types
+- `on_nodes_change` - Event handler for node changes
+- `on_edges_change` - Event handler for edge changes
+- `on_connect` - Event handler for new connections
+- `fit_view: bool` - Auto-fit nodes on load
+- `fit_view_options: FitViewOptions` - Options for fit_view
+- `style` - Component styling
+
+### `rxe.flow.background`
+
+Renders a background pattern.
+
+**Props:**
+- `color: str` - Pattern color
+- `bg_color: str` - Background color
+- `variant: "lines" | "dots" | "cross"` - Pattern type
+- `gap: float | tuple[float, float]` - Gap between patterns
+- `size: float` - Pattern element size
+
+### `rxe.flow.controls`
+
+Renders zoom/pan control buttons.
+
+**Props:**
+- `show_zoom: bool` - Show zoom buttons
+- `show_fit_view: bool` - Show fit view button
+- `show_interactive: bool` - Show lock button
+- `position: PanelPosition` - Controls position
+
+### `rxe.flow.mini_map`
+
+Renders a minimap overview.
+
+**Props:**
+- `node_color: str | Any` - Node color on minimap
+- `node_stroke_color: str | Any` - Node stroke color
+- `pannable: bool` - Enable panning via minimap
+- `zoomable: bool` - Enable zooming via minimap
+- `position: PanelPosition` - Minimap position
+
+---
+
+## Nodes
+
+### Node Type Structure
+
+```python
+{
+    "id": str,                    # Unique identifier
+    "position": {"x": float, "y": float},  # Position
+    "data": dict,                 # Arbitrary data
+    "type": str,                  # Node type
+    "sourcePosition": str,        # "top" | "right" | "bottom" | "left"
+    "targetPosition": str,        # "top" | "right" | "bottom" | "left"
+    "hidden": bool,               # Visibility
+    "selected": bool,             # Selection state
+    "draggable": bool,            # Can be dragged
+    "selectable": bool,           # Can be selected
+    "connectable": bool,          # Can connect to others
+    "deletable": bool,            # Can be deleted
+    "width": float,               # Node width
+    "height": float,              # Node height
+    "parentId": str,              # Parent node for sub-flows
+    "style": dict,                # Custom styles
+    "className": str              # CSS class
+}
+```
+
+### Built-in Node Types
+
+| Type | Description |
+|------|-------------|
+| `input` | Entry point with source handles only |
+| `default` | Standard node with source and target handles |
+| `output` | Exit point with target handles only |
+
+---
+
+## Edges
+
+### Edge Type Structure
+
+```python
+{
+    "id": str,                    # Unique identifier
+    "source": str,                # Source node ID
+    "target": str,                # Target node ID
+    "type": str,                  # Edge type
+    "sourceHandle": str | None,   # Source handle ID
+    "targetHandle": str | None,   # Target handle ID
+    "animated": bool,             # Enable animation
+    "hidden": bool,               # Visibility
+    "deletable": bool,            # Can be removed
+    "selectable": bool,           # Can be selected
+    "data": dict,                 # Arbitrary metadata
+    "label": Any,                 # Edge label
+    "style": dict,                # Custom styles
+    "className": str              # CSS class
+}
+```
+
+### Built-in Edge Types
+
+| Type | Description |
+|------|-------------|
+| `default` | Standard curved edge |
+| `straight` | Direct line |
+| `step` | Right-angled path |
+| `smoothstep` | Smooth right-angled path |
+| `bezier` | Curved bezier path |
+
+---
+
+## Hooks (API)
+
+Access via `rxe.flow.api` module.
+
+### Node Hooks
+
+| Hook | Description |
+|------|-------------|
+| `get_nodes()` | Returns all nodes |
+| `set_nodes(nodes)` | Sets nodes |
+| `add_nodes(nodes)` | Adds nodes |
+| `get_node(id)` | Returns node by ID |
+| `update_node(id, node_update, replace=False)` | Updates a node |
+| `update_node_data(id, data_update, replace=False)` | Updates node data |
+
+### Edge Hooks
+
+| Hook | Description |
+|------|-------------|
+| `get_edges()` | Returns all edges |
+| `set_edges(edges)` | Sets edges |
+| `add_edges(edges)` | Adds edges |
+| `get_edge(id)` | Returns edge by ID |
+| `update_edge(id, edge_update, replace=False)` | Updates an edge |
+| `update_edge_data(id, data_update, replace=False)` | Updates edge data |
+
+### Viewport Hooks
+
+| Hook | Description |
+|------|-------------|
+| `screen_to_flow_position(x, y, snap_to_grid=False)` | Screen → flow coordinates |
+| `flow_to_screen_position(x, y)` | Flow → screen coordinates |
+
+### Other Hooks
+
+| Hook | Description |
+|------|-------------|
+| `to_object()` | Converts flow state to JSON |
+| `get_intersecting_nodes(node, partially=True, nodes=None)` | Find intersecting nodes |
+| `get_node_connections(id, handle_type, handle_id)` | Get node connections |
+| `get_connection()` | Get current connection state |
+
+---
+
+## Utility Functions
+
+Access via `rxe.flow.util` module.
+
+### Path Utilities
+
+| Function | Description |
+|----------|-------------|
+| `get_simple_bezier_path(source_x, source_y, target_x, target_y, source_position, target_position)` | Simple bezier path |
+| `get_bezier_path(..., curvature=0.5)` | Bezier path with curvature |
+| `get_straight_path(source_x, source_y, target_x, target_y)` | Straight line path |
+| `get_smooth_step_path(..., border_radius=5, offset=20, step_position=0.5)` | Stepped path |
+
+### Change Handlers
+
+| Function | Description |
+|----------|-------------|
+| `apply_node_changes(nodes, changes)` | Apply changes to nodes |
+| `apply_edge_changes(edges, changes)` | Apply changes to edges |
+
+### Graph Utilities
+
+| Function | Description |
+|----------|-------------|
+| `add_edge(params, edges)` | Create new edge |
+| `get_incomers(node_id, nodes, edges)` | Get incoming nodes |
+| `get_outgoers(node_id, nodes, edges)` | Get outgoing nodes |
+| `get_connected_edges(nodes, edges)` | Get connected edges |
+
+---
+
+## Interactivity
+
+### State Management
+
+Define a `FlowState` class with nodes and edges as state variables:
+- `set_nodes` - Updates nodes when moved/edited
+- `set_edges` - Updates edges when modified/deleted
+
+### Event Handlers
+
+- `on_nodes_change` - Respond to node drag/edit
+- `on_edges_change` - Respond to edge modification
+- `on_connect` - Handle new connections
+
+---
+
+## Theming
+
+### CSS Variables
+
+Override CSS variables to customize appearance.
+
+### Custom Stylesheets
+
+Add via `stylesheets` prop on `rxe.App` or `rx.App`:
+```python
+stylesheets=["assets/css/my-custom-styles.css"]
+```
+
+### Per-Element Styling
+
+- Use `style` prop with a dictionary
+- Use `className` prop with CSS classes
+
+---
+
+## Examples
+
+### Add Node on Edge Drop
+Dynamically create nodes when connections are dropped on canvas.
+
+### Connection Limit on Custom Node
+Restrict connections using `isConnectable` property on handles.
+
+---
+
+*Source: [Reflex Enterprise React Flow Documentation](https://reflex.dev/docs/enterprise/react-flow/overview)*

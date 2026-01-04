@@ -1,0 +1,347 @@
+Here's the compiled markdown documentation for Reflex Custom Components:
+
+---
+
+# Reflex Custom Components - LLM Agent Reference
+
+## Overview
+
+Reflex allows creating and sharing custom components. This includes wrapping React components from npm and publishing them as Python packages for the Reflex ecosystem.
+
+---
+
+## 1. Custom Components Overview
+
+Reflex users can create high-level components or wrap React components. Release **0.4.3** introduced `reflex component` commands to wrap, test, and publish components as Python packages.
+
+### Prerequisites for Publishing
+- Account with a Python package index (e.g., PyPI)
+- Publishing utility: [Twine](https://twine.readthedocs.io/en/stable/) or [uv](https://docs.astral.sh/uv/guides/package/#publishing-your-package)
+
+### Publishing Steps
+1. `reflex component init` - Create new custom component project
+2. Develop and test the component
+3. `reflex component build` - Build the package
+4. `twine upload` or `uv publish` - Upload to PyPI
+
+---
+
+## 2. Command Reference
+
+### `reflex component init`
+
+Creates a new custom component project. Run in a new folder (e.g., `color_picker`).
+
+**Generated structure:**
+- `pyproject.toml` - Package configuration (name, version, author, license)
+- `README.md` - Installation instructions and description
+- `custom_components/` - Implementation folder
+- `<name>_demo/` - Demo Reflex app for testing
+
+The package name will be prefixed with `reflex-` (e.g., `reflex-color-picker`).
+
+### `reflex component build`
+
+Generates `.tar.gz` and `.whl` distribution files in `dist/` folder. Must run at project root where `pyproject.toml` exists.
+
+### `reflex component publish`
+
+As of **0.7.5**, Reflex doesn't handle publishing directly. Use:
+```bash
+reflex component build
+twine upload dist/*  # or: uv publish
+```
+
+### `reflex component share`
+
+Share your component on the Reflex website.
+
+---
+
+## 3. Wrapping React Components
+
+### Basic Structure
+
+```python
+import reflex as rx
+
+class MyComponent(rx.Component):
+    # NPM package name (pin version recommended)
+    library = "react-colorful@5.6.1"
+    
+    # Component to import from package
+    tag = "HexColorPicker"
+    
+    # Optional alias (if name conflicts exist)
+    alias = "ColorPicker"
+    
+    # Additional library dependencies
+    lib_dependencies: list[str] = []
+    
+    # True if default export
+    is_default = False
+```
+
+### Dynamic Components (NoSSRComponent)
+
+For client-side heavy components incompatible with SSR:
+
+```python
+class MyDynamicComponent(rx.NoSSRComponent):
+    library = "react-leaflet"
+    tag = "MapContainer"
+```
+
+**Use NoSSRComponent for:**
+- Video/Audio Players
+- Maps
+- Drawing Canvas
+- 3D Graphics
+- QR Scanners
+- Reactflow
+
+---
+
+## 4. Props
+
+### Simple Props
+
+```python
+class MyComponent(rx.Component):
+    library = "some-library"
+    tag = "SomeComponent"
+    
+    # Define props with type annotations
+    color: rx.Var[str]
+    size: rx.Var[int]
+    enabled: rx.Var[bool]
+    options: rx.Var[dict]
+```
+
+### Custom Types with PropsBase
+
+```python
+class ChartOptions(rx.PropsBase):
+    title: str
+    show_legend: bool  # Auto-converts to camelCase in JS
+    
+class Chart(rx.Component):
+    options: rx.Var[ChartOptions]
+```
+
+### Event Handlers
+
+```python
+class ColorPicker(rx.Component):
+    library = "react-colorful"
+    tag = "HexColorPicker"
+    
+    color: rx.Var[str]
+    
+    # Event handler with signature
+    on_change: rx.EventHandler[lambda color: [color]]
+```
+
+### Component Props
+
+```python
+class Container(rx.Component):
+    # Accept other components as props
+    header: rx.Var[rx.Component]
+    footer: rx.Var[rx.Component]
+```
+
+---
+
+## 5. Custom Code and Hooks
+
+### Custom Code
+
+```python
+class MyComponent(rx.Component):
+    def add_custom_code(self) -> list[str]:
+        return [
+            "const myGlobalVar = 'hello';",
+            "function myHelper() { return 42; }"
+        ]
+```
+
+### Custom Hooks
+
+```python
+class MyComponent(rx.Component):
+    def add_hooks(self) -> list[str | rx.Var]:
+        return [
+            "const [count, setCount] = useState(0);",
+            "useEffect(() => { console.log('mounted'); }, []);"
+        ]
+```
+
+---
+
+## 6. Imports and Styles
+
+### Adding Imports
+
+```python
+class MyComponent(rx.Component):
+    def add_imports(self) -> dict:
+        return {
+            "react": ["useState", "useEffect"],
+            "leaflet/dist/leaflet.css": "",  # CSS import
+            "some-lib": rx.ImportVar(tag="helper", alias="myHelper")
+        }
+```
+
+### Adding Styles
+
+```python
+class MyComponent(rx.Component):
+    def add_styles(self) -> dict:
+        return {
+            "width": "100%",
+            "height": "400px",
+            "border": "1px solid #ccc"
+        }
+```
+
+---
+
+## 7. Local Components
+
+### Using Local JSX Files
+
+```python
+# For hello.jsx in same directory
+class Hello(rx.Component):
+    library = f"$/public{rx.asset('hello.jsx', shared=True)}"
+    tag = "Hello"
+    is_default = True
+```
+
+### Using Assets
+
+```python
+# Include SVG/images from same directory
+rx.image(src=rx.asset("wave.svg"))
+```
+
+### Local Package Specifiers
+
+```python
+# GitHub
+library = "@masenf/hello-react@github:masenf/hello-react"
+
+# URL
+library = "@masenf/hello-react@https://github.com/.../main.tar.gz"
+
+# Local directory
+library = "@masenf/hello-react@../hello-react"
+```
+
+---
+
+## 8. Serializers
+
+For complex types that need JSON serialization:
+
+```python
+from reflex.utils.serializers import serializer
+
+@serializer
+def serialize_figure(fig: PlotlyFigure) -> dict:
+    return fig.to_json()
+
+class PlotlyChart(rx.Component):
+    figure: rx.Var[PlotlyFigure]
+```
+
+---
+
+## 9. Complete Example: ReactFlow
+
+```python
+import reflex as rx
+
+class ReactFlow(rx.NoSSRComponent):
+    library = "reactflow"
+    tag = "ReactFlow"
+    
+    nodes: rx.Var[list[dict]]
+    edges: rx.Var[list[dict]]
+    fit_view: rx.Var[bool]
+    
+    on_nodes_change: rx.EventHandler[lambda changes: [changes]]
+    on_connect: rx.EventHandler[lambda connection: [connection]]
+    
+    def _get_custom_code(self) -> str:
+        return "import 'reactflow/dist/style.css';"
+
+class Background(rx.NoSSRComponent):
+    library = "reactflow"
+    tag = "Background"
+
+class Controls(rx.NoSSRComponent):
+    library = "reactflow"
+    tag = "Controls"
+
+# Create component functions
+react_flow = ReactFlow.create
+background = Background.create
+controls = Controls.create
+```
+
+**Usage in app:**
+
+```python
+class State(rx.State):
+    nodes: list[dict] = [
+        {"id": "1", "position": {"x": 0, "y": 0}, "data": {"label": "Node 1"}}
+    ]
+    edges: list[dict] = []
+    
+    def on_connect(self, connection):
+        self.edges.append(connection)
+
+def index():
+    return react_flow(
+        background(),
+        controls(),
+        nodes=State.nodes,
+        edges=State.edges,
+        on_connect=State.on_connect,
+        fit_view=True,
+    )
+```
+
+---
+
+## 10. Reserved Names
+
+When wrapping components, avoid these reserved prop names in Reflex:
+- `style` (use `theme` and `rename_props` to map back)
+- Other Reflex internal names
+
+```python
+class MyComponent(rx.Component):
+    theme: rx.Var[dict]  # Use 'theme' instead of 'style'
+    
+    def _get_vars(self):
+        return {**super()._get_vars(), "style": self.theme}
+```
+
+---
+
+## Quick Reference
+
+| Command | Purpose |
+|---------|---------|
+| `reflex component init` | Create new component project |
+| `reflex component build` | Build distribution files |
+| `reflex component share` | Share on Reflex website |
+
+| Class | Use Case |
+|-------|----------|
+| `rx.Component` | Standard React components |
+| `rx.NoSSRComponent` | Client-side only components |
+| `rx.PropsBase` | Custom prop types with camelCase conversion |

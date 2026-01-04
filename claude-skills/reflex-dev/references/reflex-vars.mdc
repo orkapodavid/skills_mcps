@@ -1,0 +1,228 @@
+# Reflex Vars - LLM Agent Skills Documentation
+
+## Overview
+
+Vars are reactive state fields in Reflex apps that change over time and are directly rendered in the frontend. This document covers Base Vars and Custom Vars.
+
+---
+
+## Base Vars
+
+Base vars are defined as fields in your `State` class. They can have default values or type annotations.
+
+### Basic State Definition
+
+```python
+import reflex as rx
+
+class TickerState(rx.State):
+    ticker: str = "AAPL"
+    price: int = 150
+    change: int = 4
+
+def index():
+    return rx.vstack(
+        rx.heading(TickerState.ticker),
+        rx.text(f"Current Price: ${TickerState.price}"),
+        rx.text(f"Change: {TickerState.change}%"),
+    )
+```
+
+### Key Rules
+- **Type annotations required** if no default value provided
+- **Must be JSON serializable**
+
+---
+
+## Accessing State Variables Across Pages
+
+State classes can be imported and used across different pages:
+
+```python
+# state.py
+import reflex as rx
+
+class TickerState(rx.State):
+    ticker: str = "AAPL"
+    price: int = 150
+```
+
+```python
+# index.py
+import reflex as rx
+from .state import TickerState
+
+def index():
+    return rx.text(f"{TickerState.ticker}: ${TickerState.price}")
+```
+
+---
+
+## Backend-Only Vars
+
+Vars starting with underscore (`_`) are **backend-only** - not synced to frontend.
+
+### Use Cases
+- Store sensitive data (auth tokens, secrets)
+- Large data structures not directly rendered
+- Non-JSON-serializable objects (must be pickle-able for Redis)
+
+```python
+import reflex as rx
+import random
+
+class BackendState(rx.State):
+    _backend: list[int] = []  # Backend-only, not sent to client
+    page: int = 0
+    page_size: int = 10
+
+    def generate_data(self):
+        self._backend = [random.randint(1, 100) for _ in range(100)]
+
+    @rx.var
+    def current_page_data(self) -> list[int]:
+        start = self.page * self.page_size
+        return self._backend[start:start + self.page_size]
+
+    def next_page(self):
+        if (self.page + 1) * self.page_size < len(self._backend):
+            self.page += 1
+
+    def prev_page(self):
+        if self.page > 0:
+            self.page -= 1
+```
+
+---
+
+## Using `rx.Field` for Better Type Hinting
+
+Use `rx.Field[T]` annotation with `rx.field(default_value)` for improved IDE support and type checking.
+
+### Boolean Example
+
+```python
+import reflex as rx
+
+class State(rx.State):
+    x: rx.Field[bool] = rx.field(True)
+
+def index():
+    return rx.text(State.x.to_string())  # Better autocomplete: to_string(), equals()
+```
+
+### Complex Types Example
+
+```python
+import reflex as rx
+
+class State(rx.State):
+    x: rx.Field[dict[str, list[int]]] = rx.field({"a": [1, 2, 3]})
+
+def index():
+    return rx.foreach(
+        State.x.keys(),  # Autocomplete: contains(), keys(), values(), items(), merge()
+        lambda k: rx.text(k)
+    )
+```
+
+---
+
+## Custom Vars
+
+For complex data structures beyond primitives, use **dataclasses** (recommended), **TypedDict**, or **Pydantic models**.
+
+### Using Dataclasses (Recommended)
+
+```python
+import reflex as rx
+from dataclasses import dataclass
+
+@dataclass
+class Translation:
+    original: str
+    translated: str
+    language: str
+
+class TranslationState(rx.State):
+    translation: Translation = Translation(
+        original="Hello",
+        translated="Hola", 
+        language="Spanish"
+    )
+
+def index():
+    return rx.vstack(
+        rx.text(f"Original: {TranslationState.translation.original}"),
+        rx.text(f"Translated: {TranslationState.translation.translated}"),
+        rx.text(f"Language: {TranslationState.translation.language}"),
+    )
+```
+
+### Using TypedDict
+
+```python
+import reflex as rx
+from typing import TypedDict
+
+class Translation(TypedDict):
+    original: str
+    translated: str
+    language: str
+
+class TranslationState(rx.State):
+    translation: Translation = {
+        "original": "Hello",
+        "translated": "Hola",
+        "language": "Spanish"
+    }
+
+def index():
+    return rx.text(TranslationState.translation["original"])
+```
+
+### Using Pydantic Models
+
+```python
+import reflex as rx
+from pydantic import BaseModel
+
+class Translation(BaseModel):
+    original: str
+    translated: str
+    language: str
+
+class TranslationState(rx.State):
+    translation: Translation = Translation(
+        original="Hello",
+        translated="Hola",
+        language="Spanish"
+    )
+
+def index():
+    return rx.text(TranslationState.translation.original)
+```
+
+---
+
+## Quick Reference
+
+| Var Type | Prefix | Synced to Frontend | JSON Required | Use Case |
+|----------|--------|-------------------|---------------|----------|
+| Base Var | none | ✅ Yes | ✅ Yes | UI-rendered state |
+| Backend-Only | `_` | ❌ No | ❌ No (pickle-able) | Sensitive/large data |
+| Computed Var | `@rx.var` | ✅ Yes | ✅ Yes | Derived values |
+
+## Best Practices
+
+1. **Always type annotate** state vars for better IDE support
+2. **Use `rx.Field`** for complex types to get autocomplete
+3. **Use backend-only vars** for auth tokens and sensitive data
+4. **Use dataclasses** for custom complex types (best IDE support)
+5. **Keep state JSON serializable** unless using backend-only vars
+
+---
+
+*Source: [Reflex Docs - Base Vars](https://reflex.dev/docs/vars/base-vars/) | [Custom Vars](https://reflex.dev/docs/vars/custom-vars/)*
+
+---

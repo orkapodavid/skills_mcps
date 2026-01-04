@@ -1,0 +1,195 @@
+# Reflex Self-Hosting Documentation
+
+## Overview
+Reflex apps can be self-hosted if `reflex deploy` doesn't fit your use case. Clone your code to a server and install the requirements.
+
+---
+
+## Self Hosting
+
+### API URL Configuration
+
+Edit your `rxconfig.py` file and set `api_url` to the publicly accessible IP address or hostname of your server, with port `:8000` at the end. This is essential for frontend-backend communication.
+
+```python
+config = rx.Config(
+    app_name="your_app_name",
+    api_url="http://app.example.com:8000",
+)
+```
+
+You can also set the environment variable `API_URL` at runtime or export time.
+
+### Production Mode
+
+Run your app in production mode:
+
+```bash
+reflex run --env prod
+```
+
+- Frontend (HTML, JS, CSS): port `3000`
+- Backend (event handlers): port `8000`
+
+> **Warning: Reverse Proxy and Websockets**
+> Reverse proxy servers like [nginx](https://nginx.org/en/docs/http/websocket.html) or [apache](https://httpd.apache.org/docs/2.4/mod/mod_proxy.html#protoupgrade) must be configured to pass the `Upgrade` header for websocket connectivity.
+
+### Exporting a Static Build
+
+Export for static hosting providers (Netlify, GitHub Pages):
+
+```bash
+API_URL=http://app.example.com:8000 reflex export
+```
+
+This creates:
+- `frontend.zip` - minified HTML, JS, CSS
+- `backend.zip` - backend Python code
+
+Options:
+- `--frontend-only` - export only frontend
+- `--backend-only` - export only backend
+- `--no-zip` - export without zipping (frontend in `.web/build/client/`)
+
+### Docker Container Deployment
+
+Project structure:
+
+```bash
+hello
+├── .web
+├── assets
+├── hello
+│   ├── __init__.py
+│   └── hello.py
+├── rxconfig.py
+├── Dockerfile
+└── requirements.txt
+```
+
+Configure `rxconfig.py`:
+
+```python
+config = rx.Config(
+    app_name="app",
+    api_url="http://app.example.com:8000",
+)
+```
+
+Build and run:
+
+```bash
+docker build -t reflex-project:latest .
+docker run -d -p 3000:3000 -p 8000:8000 --name app reflex-project:latest
+```
+
+---
+
+## Deploy to Databricks
+
+### Prerequisites
+- Databricks workspace with Unity Catalog enabled
+- GitHub repository with Reflex application
+- Reflex Enterprise license (for single-port deployment)
+
+### Step 1: Connect Repository
+1. Navigate to Databricks workspace
+2. Go to user directory → **Create** → **Git folder**
+3. Paste GitHub repository URL
+
+### Step 2: Configure Application
+
+Create `app.yaml` in Databricks:
+
+```yaml
+command: [
+  "reflex", "run", "--env", "prod",
+  "--backend-port", "$DATABRICKS_APP_PORT"
+]
+env:
+  - name: "HOME"
+    value: "/tmp/reflex"
+  - name: "REFLEX_ACCESS_TOKEN"
+    value: "your-token-here"
+  - name: "DATABRICKS_WAREHOUSE_ID"
+    value: "your-sql-warehouse-id"
+  - name: "DATABRICKS_CATALOG"
+    value: "your-catalog-name"
+  - name: "DATABRICKS_SCHEMA"
+    value: "your-schema-name"
+  - name: "REFLEX_SHOW_BUILT_WITH_REFLEX"
+    value: 0
+```
+
+Get Reflex Access Token from [Reflex Cloud Tokens](https://cloud.reflex.dev/tokens/).
+
+### Step 3: Enable Single-Port Deployment
+
+Update `rxconfig.py`:
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+rxe.Config(app_name="app", use_single_port=True)
+```
+
+Update application entry point:
+
+```python
+import reflex_enterprise as rxe
+
+app = rxe.App(
+    # your app configuration
+)
+```
+
+Add to `requirements.txt`:
+- `reflex-enterprise`
+- `asgiproxy`
+
+### Step 4: Create Databricks App
+1. Go to **Compute** → **Apps** → **Create App**
+2. Select **Custom App**
+3. Configure SQL warehouse
+
+### Step 5: Set Permissions
+
+**Catalog Permissions:**
+- USE CATALOG
+- USE SCHEMA
+
+**Schema Permissions:**
+- USE SCHEMA
+- EXECUTE
+- SELECT
+- READ VOLUME (if required)
+
+### Step 6: Deploy
+1. Click **Deploy** in Apps interface
+2. Provide Git folder path
+3. Monitor deployment logs
+
+### Configuration Reference
+
+| Environment Variable | Description | Example |
+|---------------------|-------------|---------|
+| `HOME` | Application home directory | `/tmp/reflex` |
+| `REFLEX_ACCESS_TOKEN` | Authentication for Reflex Cloud | `rx_token_...` |
+| `DATABRICKS_WAREHOUSE_ID` | SQL warehouse identifier | Auto-assigned |
+| `DATABRICKS_CATALOG` | Target catalog name | `main` |
+| `DATABRICKS_SCHEMA` | Target schema name | `default` |
+| `REFLEX_SHOW_BUILT_WITH_REFLEX` | Show Reflex branding (Enterprise) | `0` or `1` |
+
+### Troubleshooting
+- **Permission Errors**: Verify catalog/schema permissions
+- **Port Issues**: Use `$DATABRICKS_APP_PORT` with single-port config
+- **Token Issues**: Verify Reflex access token validity
+- **Deployment Failures**: Check deployment logs
+
+### Notes
+- Single-port deployment requires Reflex Enterprise
+- Configuration must be created in Databricks, not pushed from GitHub
+- Updates require manual pulling from deployment interface
+
+---

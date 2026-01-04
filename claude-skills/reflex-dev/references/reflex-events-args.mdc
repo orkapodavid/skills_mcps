@@ -1,0 +1,351 @@
+# Reflex Event Arguments Documentation
+
+> Comprehensive guide for handling event arguments in Reflex applications.
+
+---
+
+## Overview
+
+Events in Reflex are composed of two parts:
+- **Event Handlers**: Functions that update the State when triggered
+- **Event Triggers**: Component props that fire events (e.g., `on_click`, `on_change`)
+
+**Key Rule:** The event handler signature must match the event trigger's argument count.
+
+---
+
+## Event Arguments Basics
+
+### Slider Example (Single Argument)
+
+The `on_value_commit` trigger passes one argument (the slider value).
+
+```python
+import reflex as rx
+
+class SliderState(rx.State):
+    value: int = 50
+
+    @rx.event
+    def set_end(self, value: list[int]):
+        self.value = value[0]
+
+def slider_example():
+    return rx.vstack(
+        rx.heading(SliderState.value),
+        rx.slider(
+            default_value=[50],
+            on_value_commit=SliderState.set_end,
+        ),
+    )
+```
+
+### Form Example (Dictionary Argument)
+
+The `on_submit` trigger passes form data as a dictionary.
+
+```python
+import reflex as rx
+
+class FormState(rx.State):
+    form_data: dict = {}
+
+    @rx.event
+    def handle_submit(self, form_data: dict):
+        self.form_data = form_data
+
+def form_example():
+    return rx.vstack(
+        rx.form(
+            rx.vstack(
+                rx.checkbox("Checked", name="checked"),
+                rx.button("Submit", type="submit"),
+            ),
+            on_submit=FormState.handle_submit,
+            reset_on_submit=True,
+        ),
+        rx.heading("Results"),
+        rx.text(FormState.form_data.to_string()),
+    )
+```
+
+⚠️ **Error:** `EventHandlerArgMismatch` is raised when handler args don't match trigger args.
+
+---
+
+## Pass Additional Arguments to Event Handlers
+
+Use a **lambda** to pass extra arguments beyond what the event trigger provides.
+
+```python
+import reflex as rx
+
+class ColorState(rx.State):
+    colors: list[str] = ["red", "green", "blue"]
+
+    @rx.event
+    def change_color(self, color: str, index: int):
+        self.colors[index] = color
+
+def color_inputs():
+    return rx.hstack(
+        rx.foreach(
+            ColorState.colors,
+            lambda color, index: rx.input(
+                value=color,
+                background_color=color,
+                on_blur=lambda text: ColorState.change_color(text, index),
+            ),
+        ),
+    )
+```
+
+**How it works:**
+- `on_blur` passes the input text to the lambda
+- The lambda calls `change_color` with both the text AND the index
+
+⚠️ **Error:** `EventFnArgMismatch` is raised when lambda args don't match trigger args.
+
+**Best Practice:** Always provide type annotations for event handler parameters.
+
+---
+
+## Events with Partial Arguments (Advanced)
+
+*Added in v0.5.0*
+
+Event arguments are passed **positionally**. Unfilled arguments are provided by the event trigger.
+
+These two examples are equivalent:
+
+```python
+# Explicit lambda
+rx.input(on_change=lambda value: State.set_value(value))
+
+# Partial application (implicit)
+rx.input(on_change=State.set_value)
+```
+
+---
+
+## Built-in Setters
+
+Every state var has a built-in setter: `set_VARNAME`
+
+```python
+import reflex as rx
+
+class SelectState(rx.State):
+    selected: str = "1"
+
+# Manual event handler
+def select_manual():
+    return rx.select(
+        ["1", "2", "3"],
+        value=SelectState.selected,
+        on_change=SelectState.set_selected,  # Built-in setter
+    )
+```
+
+---
+
+## Event Actions
+
+### DOM Event Propagation
+
+#### `prevent_default`
+Prevents default browser behavior.
+
+```python
+import reflex as rx
+
+class LinkState(rx.State):
+    value: bool = False
+
+    @rx.event
+    def toggle(self):
+        self.value = not self.value
+
+def link_example():
+    return rx.vstack(
+        rx.link(
+            "This Link Does Nothing",
+            href="/",
+            on_click=LinkState.toggle.prevent_default,
+        ),
+        rx.text(f"The value is {LinkState.value}"),
+        rx.button("Toggle Value", on_click=LinkState.toggle),
+    )
+```
+
+#### `stop_propagation`
+Stops event from bubbling to parent elements.
+
+```python
+import reflex as rx
+
+class PropState(rx.State):
+    clicked: str = ""
+
+    @rx.event
+    def handle_click(self, source: str):
+        self.clicked = source
+
+def propagation_example():
+    return rx.vstack(
+        rx.button(
+            "btn1 - Stop Propagation",
+            on_click=lambda: PropState.handle_click("btn1").stop_propagation,
+        ),
+        rx.button(
+            "btn2 - Normal Propagation",
+            on_click=lambda: PropState.handle_click("btn2"),
+        ),
+        on_click=lambda: PropState.handle_click("vstack"),
+    )
+```
+
+### Throttle and Debounce
+
+#### `throttle(ms)`
+Limits event frequency. Useful for `on_scroll`, `on_mouse_move`.
+
+```python
+import reflex as rx
+
+class ScrollState(rx.State):
+    last_scroll: str = ""
+
+    @rx.event
+    def handle_scroll(self, position: dict):
+        self.last_scroll = str(position)
+
+def scroll_example():
+    return rx.box(
+        rx.foreach(
+            range(100),
+            lambda i: rx.text(f"Item {i}"),
+        ),
+        on_scroll=ScrollState.handle_scroll.throttle(500),  # 500ms throttle
+        height="200px",
+        overflow="auto",
+    )
+```
+
+#### `debounce(ms)`
+Delays processing until timeout. Useful for sliders, search inputs.
+
+```python
+import reflex as rx
+
+class SliderState(rx.State):
+    settled_value: int = 50
+
+    @rx.event
+    def update_value(self, value: list[int]):
+        self.settled_value = value[0]
+
+def debounce_example():
+    return rx.vstack(
+        rx.slider(
+            default_value=[50],
+            on_change=SliderState.update_value.debounce(500),  # 500ms debounce
+        ),
+        rx.text(f"Settled Value: {SliderState.settled_value}"),
+    )
+```
+
+#### `temporal`
+*Added in v0.6.6*
+
+Prevents events from queuing when backend is down.
+
+```python
+rx.moment(
+    interval=1000,
+    on_change=State.update_time.temporal,
+)
+```
+
+---
+
+## Common Event Triggers Reference
+
+| Trigger | Fires When | Argument |
+|---------|------------|----------|
+| `on_click` | Element clicked | None |
+| `on_change` | Value changes | New value |
+| `on_blur` | Focus leaves element | Current value |
+| `on_focus` | Element receives focus | None |
+| `on_submit` | Form submitted | `dict` of form data |
+| `on_mount` | Component rendered | None |
+| `on_unmount` | Component removed | None |
+| `on_scroll` | Element scrolled | Scroll position |
+| `on_mouse_enter` | Mouse enters element | None |
+| `on_mouse_leave` | Mouse leaves element | None |
+| `on_double_click` | Element double-clicked | None |
+| `on_context_menu` | Right-click on element | None |
+| `on_key_down` | Key pressed | Key event |
+| `on_key_up` | Key released | Key event |
+
+---
+
+## Lifecycle Events
+
+### `on_mount`
+Called after component renders.
+
+```python
+import reflex as rx
+
+class MountState(rx.State):
+    mounted: bool = False
+
+    @rx.event
+    def on_mount(self):
+        self.mounted = True
+
+def mount_example():
+    return rx.box(
+        rx.text("Component mounted!" if MountState.mounted else "Loading..."),
+        on_mount=MountState.on_mount,
+    )
+```
+
+### `on_unmount`
+Called before component is removed (internal navigation only).
+
+```python
+import reflex as rx
+
+class UnmountState(rx.State):
+    @rx.event
+    def cleanup(self):
+        # Clean up resources
+        pass
+
+def unmount_example():
+    return rx.box(
+        rx.text("Resource active"),
+        on_unmount=UnmountState.cleanup,
+    )
+```
+
+---
+
+## Page Load Events
+
+```python
+import reflex as rx
+
+class PageState(rx.State):
+    data: list = []
+
+    @rx.event
+    def load_data(self):
+        self.data = fetch_data()
+
+@rx.page(on_load=PageState.load_data)
+def my_page():
+    return rx.text("Page loaded!")
+```

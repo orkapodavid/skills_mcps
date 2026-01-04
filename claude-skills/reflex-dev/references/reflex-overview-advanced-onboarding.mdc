@@ -1,0 +1,478 @@
+# Reflex Framework Documentation for LLM Agents
+
+> A comprehensive guide to Reflex's state management, architecture, and event handling for building full-stack Python web applications.
+
+---
+
+## Table of Contents
+1. [How Reflex Works](#how-reflex-works)
+2. [State Management](#state-management)
+3. [Vars (Variables)](#vars)
+4. [Events](#events)
+5. [Configuration](#configuration)
+
+---
+
+## How Reflex Works
+
+### Architecture Overview
+
+Reflex apps compile to:
+- **Frontend**: React/Next.js app (served on port 3000)
+- **Backend**: FastAPI server (served on port 8000)
+
+Communication happens via **WebSockets** for real-time state synchronization.
+
+```
+┌─────────────────┐     WebSocket      ┌─────────────────┐
+│    Frontend     │ ◄────────────────► │     Backend     │
+│  (React/Next)   │    Events/State    │    (FastAPI)    │
+│   Port 3000     │                    │    Port 8000    │
+└─────────────────┘                    └─────────────────┘
+```
+
+### Key Principles
+- **Single codebase**: Define frontend and backend in Python
+- **UI compiles to JavaScript**: Only the UI is compiled; all logic stays in Python
+- **Server-side state**: All state management runs on the server
+
+### Components
+
+Components are Python functions that compile to React:
+
+```python
+def index():
+    return rx.hstack(
+        rx.avatar(src=State.profile_image),
+        rx.input(
+            placeholder="Enter GitHub username",
+            on_blur=State.set_profile
+        )
+    )
+```
+
+Compiles to React JSX internally. Components support:
+- Props for appearance/functionality
+- Event triggers for user interactions
+- CSS-in-Python styling via Emotion library
+
+### Event Processing Flow
+
+1. **Event Trigger** → User interaction (click, blur, etc.)
+2. **Event Queue** → Frontend queues events with client token, handler, args
+3. **WebSocket** → Event sent to backend
+4. **State Manager** → Maps client tokens to state instances
+5. **Event Handler** → Executes Python logic, modifies state
+6. **State Update** → Dirty vars sent back to frontend
+7. **UI Update** → React re-renders with new state
+
+---
+
+## State Management
+
+### State Basics
+
+State is defined as a class inheriting from `rx.State`:
+
+```python
+import reflex as rx
+
+class ExampleState(rx.State):
+    # Base vars - can change over time
+    colors: list[str] = ["red", "green", "blue"]
+    index: int = 0
+    
+    # Computed var - derived from base vars
+    @rx.var
+    def color(self) -> str:
+        return self.colors[self.index]
+    
+    # Event handler - modifies state
+    @rx.event
+    def next_color(self):
+        self.index = (self.index + 1) % len(self.colors)
+```
+
+### Core Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Base Var** | Mutable state field, only modified by event handlers |
+| **Computed Var** | Derived value using `@rx.var`, auto-recomputes |
+| **Event Trigger** | Component prop like `on_click` that fires events |
+| **Event Handler** | State method that modifies vars |
+
+### Client States
+
+- Each browser tab gets a unique client token
+- Each user has their own state instance on the server
+- Never directly instantiate state classes
+
+### Helper Methods
+
+Methods starting with `_` are backend-only helpers:
+
+```python
+class State(rx.State):
+    def _authenticate_user(self, token: str) -> bool:
+        # Private helper - not callable from frontend
+        return verify_token(token)
+    
+    @rx.event
+    def secure_action(self):
+        if self._authenticate_user(self.token):
+            # Perform action
+            pass
+```
+
+---
+
+## Vars
+
+### Base Vars
+
+Fields in your State class that can change:
+
+```python
+class TickerState(rx.State):
+    ticker: str = "AAPL"
+    price: float = 150.0
+    
+    # Without default - must have type annotation
+    volume: int
+```
+
+**Requirements:**
+- Must be JSON serializable
+- Should have type annotations
+
+### Backend-Only Vars
+
+Prefix with `_` to keep server-side only:
+
+```python
+class State(rx.State):
+    _sensitive_data: dict = {}  # Not sent to frontend
+    _large_dataset: list = []   # Reduces network traffic
+```
+
+**Benefits:**
+- Not synchronized to frontend
+- Can store sensitive data
+- Don't need to be JSON serializable (must be pickle-able for Redis)
+
+### Using rx.Field for Better Type Hints
+
+```python
+class State(rx.State):
+    x: rx.Field[bool] = rx.field(True)
+    data: rx.Field[dict[str, list[int]]] = rx.field({"nums": [1, 2, 3]})
+```
+
+### Computed Vars
+
+Derived values that auto-update:
+
+```python
+class State(rx.State):
+    text: str = ""
+    
+    @rx.var
+    def upper_text(self) -> str:
+        return self.text.upper()
+    
+    # Uncached - recomputes on every state update
+    @rx.var(cache=False)
+    def timestamp(self) -> str:
+        return datetime.now().isoformat()
+```
+
+### Async Computed Vars
+
+```python
+class State(rx.State):
+    user_id: int = 1
+    
+    @rx.var
+    async def user_data(self) -> dict:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"/api/users/{self.user_id}")
+            return response.json()
+```
+
+### Var Operations
+
+Transform vars on frontend without computed vars:
+
+```python
+# String operations
+rx.text(State.name.upper())
+rx.text(State.name.lower())
+rx.text(State.text.split(" "))
+
+# List operations
+rx.text(State.items.length())
+rx.text(State.items.reverse())
+rx.text(State.items.contains("apple"))
+rx.text(State.items.join(", "))
+
+# Comparisons
+rx.cond(State.count > 10, "High", "Low")
+rx.cond(State.name == "admin", admin_view(), user_view())
+
+# Math
+rx.text(State.price * State.quantity)
+rx.text(State.value + 100)
+
+# Boolean
+rx.cond(State.a & State.b, "Both true", "Not both")
+rx.cond(State.a | State.b, "At least one", "Neither")
+rx.cond(~State.flag, "Flag is false", "Flag is true")
+
+# Indexing (requires strict type annotations)
+rx.text(State.items[0])
+rx.text(State.data["key"])
+```
+
+---
+
+## Events
+
+### Events Overview
+
+```python
+class State(rx.State):
+    word: str = "Welcome"
+    
+    @rx.event
+    def next_word(self):
+        words = ["Welcome", "Hello", "Goodbye"]
+        idx = words.index(self.word)
+        self.word = words[(idx + 1) % len(words)]
+
+def index():
+    return rx.heading(
+        State.word,
+        on_mouse_over=State.next_word  # Event trigger
+    )
+```
+
+### Event Arguments
+
+Event handlers receive args from triggers:
+
+```python
+class State(rx.State):
+    value: int = 50
+    
+    @rx.event
+    def set_value(self, val: int):
+        self.value = val
+
+# Slider passes value to handler
+rx.slider(value=State.value, on_value_commit=State.set_value)
+```
+
+### Passing Additional Arguments
+
+Use lambdas to pass extra args:
+
+```python
+class State(rx.State):
+    @rx.event
+    def change_color(self, color: str, index: int):
+        self.colors[index] = color
+
+# Lambda receives event arg, adds index
+rx.input(on_blur=lambda text: State.change_color(text, 0))
+rx.input(on_blur=lambda text: State.change_color(text, 1))
+```
+
+### Setters
+
+Auto-generated setters for base vars:
+
+```python
+class State(rx.State):
+    selected: str = "Option 1"
+
+# These are equivalent:
+rx.select(on_change=State.set_selected)  # Built-in setter
+rx.select(on_change=lambda v: State.set_selected(v))
+```
+
+### Yielding Updates
+
+Send multiple UI updates from one handler:
+
+```python
+class State(rx.State):
+    count: int = 0
+    
+    @rx.event
+    async def increment_slowly(self):
+        for i in range(100):
+            self.count = i
+            yield  # Send update to frontend
+            await asyncio.sleep(0.1)
+```
+
+### Yielding Other Events
+
+Chain events together:
+
+```python
+class State(rx.State):
+    @rx.event
+    def first_handler(self):
+        # Do something
+        yield State.second_handler  # Trigger another handler
+    
+    @rx.event
+    def second_handler(self):
+        # Runs after first_handler yields
+        pass
+```
+
+### Background Tasks
+
+Long-running concurrent tasks:
+
+```python
+class State(rx.State):
+    counter: int = 0
+    running: bool = False
+    _n_tasks: int = 0
+    
+    @rx.event(background=True)
+    async def my_task(self):
+        async with self:
+            if self._n_tasks > 0:
+                return
+            self._n_tasks += 1
+            self.running = True
+        
+        while True:
+            async with self:  # Must use context for state access
+                if not self.running:
+                    self._n_tasks -= 1
+                    return
+                self.counter += 1
+            await asyncio.sleep(0.5)
+    
+    @rx.event
+    def stop_task(self):
+        self.running = False
+```
+
+**Background Task Rules:**
+- Must be `async` functions
+- Use `@rx.event(background=True)` decorator
+- Must use `async with self` context to modify state
+- State may be stale outside context block
+- Cannot be called directly; use `yield` to trigger
+
+---
+
+## Configuration
+
+### Configuration File (rxconfig.py)
+
+```python
+import reflex as rx
+
+config = rx.Config(
+    app_name="my_app",
+    frontend_port=3000,
+    backend_port=8000,
+    api_url="http://localhost:8000",
+    db_url="sqlite:///reflex.db",
+)
+```
+
+### Environment Variables
+
+Override config with env vars:
+
+```bash
+export FRONTEND_PORT=3001
+export BACKEND_PORT=8001
+export API_URL="https://api.example.com"
+```
+
+### Command Line Arguments
+
+```bash
+reflex run --frontend-port 3001 --backend-port 8001
+```
+
+### Custom Data Directory
+
+```bash
+# Set custom Reflex directory
+export REFLEX_DIR=/path/to/custom/dir
+
+# Defaults:
+# Windows: C:/Users/<username>/AppData/Local/reflex
+# macOS: ~/Library/Application Support/reflex
+# Linux: ~/.local/share/reflex
+```
+
+---
+
+## Quick Reference
+
+### State Class Template
+
+```python
+import reflex as rx
+
+class AppState(rx.State):
+    # Base vars
+    items: list[str] = []
+    selected: str = ""
+    _backend_only: dict = {}
+    
+    # Computed var
+    @rx.var
+    def item_count(self) -> int:
+        return len(self.items)
+    
+    # Event handler
+    @rx.event
+    def add_item(self, item: str):
+        self.items.append(item)
+    
+    # Background task
+    @rx.event(background=True)
+    async def long_task(self):
+        async with self:
+            self.items.append("Started")
+        await asyncio.sleep(5)
+        async with self:
+            self.items.append("Done")
+    
+    # Helper method (backend only)
+    def _validate(self, data: str) -> bool:
+        return len(data) > 0
+```
+
+### Common Event Triggers
+
+| Trigger | Description |
+|---------|-------------|
+| `on_click` | Element clicked |
+| `on_change` | Value changed |
+| `on_blur` | Element lost focus |
+| `on_focus` | Element gained focus |
+| `on_submit` | Form submitted |
+| `on_mouse_over` | Mouse entered element |
+| `on_mouse_leave` | Mouse left element |
+| `on_key_down` | Key pressed |
+| `on_mount` | Component mounted |
+
+---
+
+*Documentation compiled from reflex.dev for LLM agent reference.*
+
+---

@@ -1,0 +1,55 @@
+# Reflex API Routes & Transformer
+
+## Overview
+
+Reflex uses a FastAPI backend. The API transformer feature allows you to transform or extend the ASGI app.
+
+Use cases:
+- Integrate existing FastAPI/Starlette applications
+- Apply middleware or transformations
+- Add additional API endpoints
+
+---
+
+## Using API Transformer
+
+```python
+app = rx.App(api_transformer=my_transformer)
+
+Types of Transformers
+1. FastAPI/Starlette Instance
+python
+
+from fastapi import FastAPI
+
+api = FastAPI()
+
+@api.get("/api/hello")
+def hello():
+    return {"message": "Hello World"}
+
+app = rx.App(api_transformer=api)
+2. Callable Transformer
+python
+
+from starlette.middleware.cors import CORSMiddleware
+
+def add_cors(asgi_app):
+    return CORSMiddleware(
+        asgi_app,
+        allow_origins=["*"],
+        allow_methods=["*"],
+    )
+
+app = rx.App(api_transformer=add_cors)
+3. Multiple Transformers
+python
+
+app = rx.App(api_transformer=[api, add_cors, add_logging])
+Reserved Routes
+Do not override these routes:
+
+Route	Purpose
+/ping/	Health check (returns "pong")
+/_event	Frontend-backend event communication
+/_upload	File uploads via rx.upload()

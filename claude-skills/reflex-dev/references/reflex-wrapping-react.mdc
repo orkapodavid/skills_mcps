@@ -1,0 +1,224 @@
+# Reflex Wrapping React Components
+
+## Overview
+
+One of Reflex's most powerful features is the ability to wrap React components and take advantage of the vast ecosystem of React libraries.
+
+If you want a specific component for your app but Reflex doesn't provide it, there's a good chance it's available as a React component. Search for it on npm, and if it's there, you can use it in your Reflex app. You can also create your own local React components and wrap them in Reflex.
+
+### What Not To Wrap
+
+Libraries that do not expose React components are difficult to wrap. Look for JSX syntax (`<h1>Hello</h1>`). If you see JSX, it's likely a React component. If not, find a JS React wrapper for the library.
+
+---
+
+## Finding & Wrapping Components
+
+### Two Ways to Find Components:
+1. Write the component yourself locally
+2. Find a well-maintained React library on npm
+
+### Key Attributes When Wrapping:
+
+```python
+class MyComponent(rx.Component):
+    # Required
+    library: str = "package-name@version"  # npm package (pin version recommended)
+    tag: str = "ComponentName"              # Component to import
+    
+    # Optional
+    alias: str = "AliasName"                # Alias if name conflicts exist
+    lib_dependencies: list[str] = []        # Additional required libraries
+    is_default: bool = False                # True if default export
+
+Dynamic Components (NoSSRComponent)
+For components incompatible with Server-Side Rendering (SSR), use rx.NoSSRComponent:
+python
+
+class MyDynamicComponent(rx.NoSSRComponent):
+    library = "my-library"
+    tag = "MyComponent"
+Use NoSSRComponent when:
+Video/Audio Players
+Maps
+Drawing Canvas
+3D Graphics
+QR Scanners
+Reactflow
+Components using window or document objects
+Props
+Simple Props
+Props passed directly to the component:
+python
+
+class ColorPicker(rx.Component):
+    library = "react-colorful"
+    tag = "HexColorPicker"
+    
+    color: rx.Var[str]
+    width: rx.Var[int]
+For custom types with camelCase conversion:
+python
+
+class MyProps(rx.PropsBase):
+    background_color: str  # Converts to backgroundColor in JS
+Callback Props
+For functions passed to components:
+python
+
+on_format: rx.Var[Callable[[str], str]]
+Component Props
+For props accepting React components (ReactNode):
+python
+
+header: rx.Var[rx.Component]
+Event Handlers
+Define with rx.EventHandler and signature function:
+python
+
+on_change: rx.EventHandler[lambda color: [color]]
+on_select: rx.EventHandler[lambda value, index: [value, index]]
+EventChain for Dictionary Event Handlers
+python
+
+from reflex.event import EventChain
+
+on_events = {
+    "click": EventChain(events=[State.handle_click]),
+    "mouseover": EventChain(events=[State.handle_hover]),
+}
+Custom Code and Hooks
+Custom Code
+Include JS code in the page (not in component):
+python
+
+def add_custom_code(self) -> list[str]:
+    return [
+        "const myGlobalVar = 'value';",
+        "function myHelper() { return 42; }",
+    ]
+Custom Hooks
+Add React hooks to your component:
+python
+
+def add_hooks(self) -> list[str | rx.Var]:
+    return [
+        "const [state, setState] = useState(0);",
+        rx.Var(
+            "useEffect(() => { console.log('mounted'); }, [])",
+            _var_data=VarData(
+                imports={"react": ["useEffect"]},
+                position=Hooks.HookPosition.POST_TRIGGER
+            )
+        ),
+    ]
+Imports and Styles
+Imports
+python
+
+def add_imports(self) -> dict[str, list[str | ImportVar]]:
+    return {
+        "react": ["useState", "useEffect"],
+        "my-library": [ImportVar(tag="helper", alias="myHelper")],
+    }
+Styles
+python
+
+def add_styles(self) -> dict[str, str]:
+    return {
+        "backgroundColor": "red",
+        "padding": "10px",
+    }
+Local Components & Packages
+Assets
+Use rx.asset for images, scripts, stylesheets:
+python
+
+rx.image(src=rx.asset("wave.svg"))
+Local Components
+For local .jsx or .tsx files:
+python
+
+class Hello(rx.Component):
+    library = f"$/public{rx.asset('hello.jsx', shared=True)}"
+    tag = "Hello"
+Local Packages
+Specify path/URL after @:
+python
+
+# GitHub
+library = "@masenf/hello-react@github:masenf/hello-react"
+
+# URL
+library = "@masenf/hello-react@https://github.com/.../main.tar.gz"
+
+# Local Directory
+library = "@masenf/hello-react@../hello-react"
+
+# Local Archive
+library = "@masenf/hello-react@../hello-react.tgz"
+Serializers
+For complex types, use the @rx.serializer decorator:
+python
+
+@rx.serializer
+def serialize_figure(fig: plotly.graph_objects.Figure) -> dict:
+    return fig.to_dict()
+Complete Example: ReactFlow
+python
+
+import reflex as rx
+
+class ReactFlow(rx.NoSSRComponent):
+    library = "reactflow"
+    tag = "ReactFlow"
+    
+    nodes: rx.Var[list[dict]]
+    edges: rx.Var[list[dict]]
+    
+    on_nodes_change: rx.EventHandler[lambda changes: [changes]]
+    on_connect: rx.EventHandler[lambda connection: [connection]]
+    
+    def _get_custom_code(self) -> str:
+        return "import 'reactflow/dist/style.css';"
+
+class Background(rx.Component):
+    library = "reactflow"
+    tag = "Background"
+
+class Controls(rx.Component):
+    library = "reactflow"
+    tag = "Controls"
+
+react_flow = ReactFlow.create
+background = Background.create
+controls = Controls.create
+More Examples
+AG Charts
+python
+
+class AgCharts(rx.Component):
+    library = "ag-charts-react"
+    tag = "AgCharts"
+    options: rx.Var[dict]
+React Leaflet (with CSS import)
+python
+
+class MapContainer(rx.NoSSRComponent):
+    library = "react-leaflet"
+    tag = "MapContainer"
+    center: rx.Var[list[float]]
+    zoom: rx.Var[int]
+    
+    def add_imports(self):
+        return {"": ["leaflet/dist/leaflet.css"]}
+React PDF Renderer (with prop renaming)
+python
+
+class Page(rx.NoSSRComponent):
+    library = "@react-pdf/renderer"
+    tag = "Page"
+    theme: rx.Var[dict]  # 'style' is reserved
+    
+    def _rename_props(self):
+        return {"theme": "style"}

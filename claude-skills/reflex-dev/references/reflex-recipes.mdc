@@ -1,0 +1,165 @@
+# Reflex Recipes
+
+Curated UI patterns and components for common use cases.
+
+---
+
+## Layout Recipes
+
+### Navigation Bar
+Common navbar patterns with links, dropdowns, search, icons, buttons, and user profiles.
+
+```python
+def navbar():
+    return rx.hstack(
+        rx.heading("Logo", size="lg"),
+        rx.spacer(),
+        rx.hstack(
+            rx.link("Home", href="/"),
+            rx.link("About", href="/about"),
+            rx.link("Pricing", href="/pricing"),
+            spacing="4",
+        ),
+        rx.button("Sign In"),
+        width="100%",
+        padding="4",
+    )
+
+ariants: Basic, Dropdown, Search bar, Icons, Buttons, User profile
+Sidebar
+Side navigation with links and optional user profile.
+python
+
+def sidebar():
+    return rx.vstack(
+        rx.heading("Reflex"),
+        rx.vstack(
+            sidebar_item("Dashboard", "/dashboard"),
+            sidebar_item("Projects", "/projects"),
+            sidebar_item("Analytics", "/analytics"),
+            width="100%",
+        ),
+        height="100vh",
+        width="250px",
+    )
+Variants: Basic, Bottom user profile, Top user profile
+Footer
+Page footer with links, newsletter signup, and multi-column layouts.
+Variants: Basic, Newsletter form, Three columns
+Content Recipes
+Forms
+Event creation and contact forms.
+python
+
+def contact_form():
+    return rx.form(
+        rx.vstack(
+            rx.input(placeholder="First Name", name="first_name"),
+            rx.input(placeholder="Email", name="email", type="email"),
+            rx.text_area(placeholder="Message", name="message"),
+            rx.button("Submit", type="submit"),
+        ),
+        on_submit=State.handle_submit,
+    )
+Multi-Column/Row Layout
+Responsive layouts using flex_direction as a list:
+python
+
+rx.flex(
+    *[rx.box(f"Item {i}") for i in range(6)],
+    flex_direction=["column", "column", "row", "row"],  # Responsive
+    flex_wrap="wrap",
+)
+Grid
+Responsive grid with grid_template_columns:
+python
+
+rx.grid(
+    *[rx.card(f"Card {i}") for i in range(12)],
+    grid_template_columns=["1fr", "1fr 1fr", "1fr 1fr 1fr", "repeat(4, 1fr)"],
+    gap="4",
+)
+Stats Cards
+Display key metrics:
+python
+
+def stat_card(title, value, change):
+    return rx.card(
+        rx.vstack(
+            rx.text(title, size="sm"),
+            rx.heading(value, size="xl"),
+            rx.text(change, color="green"),
+        )
+    )
+Top Banner
+Announcement banners with various styles.
+Variants: Basic, Sign up, Gradient, Newsletter
+Auth Recipes
+Login Form
+python
+
+def login_form():
+    return rx.card(
+        rx.vstack(
+            rx.heading("Sign in to your account"),
+            rx.input(placeholder="Email", name="email"),
+            rx.input(placeholder="Password", type="password", name="password"),
+            rx.link("Forgot password?", href="/forgot"),
+            rx.button("Sign in", type="submit"),
+            rx.text("New here? ", rx.link("Sign up", href="/signup")),
+        ),
+    )
+Variants: Default, Icons, Third-party auth, Multiple third-party auth
+Signup Form
+python
+
+def signup_form():
+    return rx.card(
+        rx.vstack(
+            rx.heading("Create an account"),
+            rx.input(placeholder="Email", name="email"),
+            rx.input(placeholder="Password", type="password", name="password"),
+            rx.checkbox("Agree to Terms and Conditions"),
+            rx.button("Register", type="submit"),
+            rx.text("Already registered? ", rx.link("Sign in", href="/login")),
+        ),
+    )
+Variants: Default, Icons, Third-party auth, Multiple third-party auth
+Other Recipes
+Smart Checkboxes Group
+Track checked boxes with a limit:
+python
+
+class CheckboxState(rx.State):
+    choices: dict[str, bool] = {k: False for k in ["A", "B", "C"]}
+    _check_limit: int = 2
+    
+    def check_choice(self, value: bool, key: str):
+        self.choices[key] = value
+    
+    @rx.var
+    def limit_reached(self) -> bool:
+        return sum(self.choices.values()) >= self._check_limit
+Pricing Cards
+Display product/service pricing with features.
+Variants: Basic, Comparison cards
+Chips
+Compact elements for tags, categories, selections:
+python
+
+def chip(label: str, selected: bool, on_click):
+    return rx.badge(
+        label,
+        variant="solid" if selected else "outline",
+        cursor="pointer",
+        on_click=on_click,
+    )
+Variants: Status, Single selection, Multiple selection
+Speed Dial
+Quick access floating action buttons:
+Variants: Vertical, Horizontal, With text, Reveal animation, Menu
+Dark Mode Toggle
+python
+
+def dark_mode_toggle():
+    return rx.color_mode.button()
