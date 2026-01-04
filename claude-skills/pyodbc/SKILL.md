@@ -1,149 +1,58 @@
 ---
 name: pyodbc-expert
-description: Expert in using pyodbc library for connecting Python to ODBC databases. Use when writing Python code to interact with databases like SQL Server, PostgreSQL, MySQL, Oracle, etc. via ODBC.
+description: This skill should be used when the user asks to "connect to SQL Server using Python", "use pyodbc", "fix ODBC errors", "write database tools in Python", or "perform bulk inserts with pyodbc".
 ---
 
 # pyodbc Expert
 
-You are an expert in using `pyodbc`, a Python DB-API 2.0 compliant ODBC interface.
-
-## Quick Overview
-- **Protocol**: ODBC (Open Database Connectivity)
-- **Parameter Style**: `qmark` (`?` placeholders). Always bind values—never string‑interpolate.
-- **Transactions**: Default is manual commit (`autocommit=False`); set `autocommit=True` when needed.
-- **Performance**: `fast_executemany` can massively speed up bulk inserts on SQL Server.
-
-## Installation & Drivers
-
-### Install
-```bash
-pip install pyodbc
-```
-Ensure you have the correct ODBC driver for your database and OS installed (e.g., `msodbcsql18` for SQL Server, `psqlODBC` for PostgreSQL).
-
-### Check Drivers
-```python
-import pyodbc
-print(pyodbc.drivers())
-```
-
-## Connection Patterns
-
-### DSN‑less (Portable)
-```python
-import pyodbc
-# SQL Server Example
-cnxn = pyodbc.connect(
-    "DRIVER={ODBC Driver 18 for SQL Server};SERVER=server;DATABASE=db;UID=user;PWD=pass;TrustServerCertificate=yes",
-    timeout=5,
-)
-```
-
-### DSN
-```python
-cnxn = pyodbc.connect("DSN=my_dsn;UID=user;PWD=pass", timeout=5)
-```
+This skill provides expertise in using the `pyodbc` library for Python database connectivity.
 
 ## Core Usage
 
-### Parameterized Queries (qmark style)
+### Installation
+Install via pip. Ensure ODBC drivers are installed for your OS/Database.
+```bash
+pip install pyodbc
+```
+Check drivers: `print(pyodbc.drivers())`.
+
+### Connection Pattern
+Use a connection string with `pyodbc.connect()`. Always use a context manager to ensure connections are closed.
+
+```python
+import pyodbc
+# DSN-less example (Recommended)
+conn_str = "DRIVER={ODBC Driver 18 for SQL Server};SERVER=...;UID=...;PWD=..."
+with pyodbc.connect(conn_str) as cnxn:
+    # Use connection
+    pass
+```
+
+### Executing Queries
+Use cursors for execution. Always use **parameter binding** (`?`) to prevent SQL injection.
+
 ```python
 with cnxn.cursor() as cur:
+    # SELECT
     cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    rows = cur.fetchall()
-```
+    row = cur.fetchone()
 
-### Transactions
-```python
-cnxn.autocommit = False    # default
-with cnxn:
-    with cnxn.cursor() as cur:
-        cur.execute("UPDATE accounts SET balance = balance - ? WHERE id = ?", (amt, from_id))
-        cur.execute("UPDATE accounts SET balance = balance + ? WHERE id = ?", (amt, to_id))
-# exiting block commits; exceptions roll back
-```
-
-## Advanced Topics
-
-### Fast Bulk Inserts (SQL Server)
-```python
-with cnxn.cursor() as cur:
-    cur.fast_executemany = True
-    cur.executemany("INSERT INTO t(col1, col2) VALUES (?, ?)", data_iterable)
-```
-
-### Dictionary Row Factory
-```python
-def dict_row(cursor, row):
-    return {d[0]: v for d, v in zip(cursor.description, row)}
-
-with cnxn.cursor() as cur:
-    cur.rowfactory = dict_row
-    cur.execute("SELECT * FROM users")
-    result = cur.fetchall()   # list of dicts
-```
-
-## Agent Skill Design (Tool Functions)
-
-### 1. Test Connection
-```python
-def test_connection(conn_str: str, timeout: int = 5) -> dict:
-    try:
-        with pyodbc.connect(conn_str, timeout=timeout) as cnxn:
-            return {"ok": True, "message": "Success"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-```
-
-### 2. Run Query (SELECT)
-```python
-def run_query(conn_str: str, sql: str, params: list | tuple = ()) -> dict:
-    with pyodbc.connect(conn_str) as cnxn:
-        with cnxn.cursor() as cur:
-            cur.execute(sql, params)
-            if cur.description:
-                cols = [d[0] for d in cur.description]
-                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-                return {"ok": True, "rows": rows, "columns": cols}
-            return {"ok": True, "message": "No results"}
-```
-
-### 3. Run Non-Query (INSERT/UPDATE/DELETE)
-```python
-def run_non_query(conn_str: str, sql: str, params: list | tuple = ()) -> dict:
-    with pyodbc.connect(conn_str) as cnxn:
-        with cnxn.cursor() as cur:
-            cur.execute(sql, params)
-            return {"ok": True, "rowcount": cur.rowcount}
-```
-
-### 4. Run Batch (Bulk)
-```python
-def run_batch(conn_str: str, sql: str, rows: list[tuple], fast: bool = False) -> dict:
-    with pyodbc.connect(conn_str) as cnxn:
-        with cnxn.cursor() as cur:
-            if fast:
-                cur.fast_executemany = True
-            cur.executemany(sql, rows)
-            return {"ok": True, "rowcount": cur.rowcount}
-```
-
-### 5. Describe Schema
-```python
-def describe_schema(conn_str: str, table_name: str | None = None) -> dict:
-    with pyodbc.connect(conn_str) as cnxn:
-        with cnxn.cursor() as cur:
-            if table_name:
-                cols = [tuple(r) for r in cur.columns(table=table_name)]
-                return {"ok": True, "columns": cols}
-            else:
-                tbls = [r.table_name for r in cur.tables(tableType='TABLE')]
-                return {"ok": True, "tables": tbls}
+    # INSERT/UPDATE
+    cur.execute("UPDATE users SET name = ? WHERE id = ?", (new_name, user_id))
+    # Transaction is committed automatically when exiting the connection block
 ```
 
 ## Best Practices
 
-- **Security**: Always use parameter binding (`?`)—never string format values.
-- **Resources**: Use context managers (`with`) for connections and cursors.
-- **Encoding**: Defaults generally UTF‑8. Use `cnxn.setencoding` if needed.
-- **Troubleshooting**: Check drivers with `pyodbc.drivers()`. Ensure architecture matches (64-bit Python needs 64-bit drivers).
+1.  **Security**: Never string-format SQL queries. Always use `?` placeholders.
+2.  **Transactions**: `pyodbc` defaults to `autocommit=False`. Use `with cnxn:` to manage transactions automatically (commit on exit, rollback on error).
+3.  **Performance**: Use `fast_executemany = True` for bulk inserts on SQL Server.
+
+## Additional Resources
+
+### Reference Files
+- **`references/patterns.md`** - Connection strings for various DBs (PostgreSQL, MySQL, Oracle), advanced performance tips (`fast_executemany`), and Unicode handling.
+- **`references/agent-tools.md`** - Ready-to-use Python functions (`test_connection`, `run_query`) for building AI agents.
+
+### Examples
+- **`examples/demo.py`** - A complete, runnable script demonstrating connection, table creation, parameterized insertion, and querying.
