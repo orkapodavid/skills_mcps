@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  IIS web.config for Reflex with Windows Authentication (Phase 1)
+  Passes authenticated username to backend via X-Remote-User header
+-->
+<configuration>
+  <system.webServer>
+    <webSocket enabled="true" />
+    
+    <!-- Windows Authentication -->
+    <security>
+      <authentication>
+        <anonymousAuthentication enabled="false" />
+        <windowsAuthentication enabled="true" useKernelMode="true">
+          <providers>
+            <clear />
+            <add value="Negotiate" />
+            <add value="NTLM" />
+          </providers>
+        </windowsAuthentication>
+      </authentication>
+    </security>
+    
+    <rewrite>
+      <!-- CRITICAL: Whitelist variables for distributed rules -->
+      <allowedServerVariables>
+        <add name="HTTP_X_REMOTE_USER" />
+        <add name="HTTP_X_FORWARDED_FOR" />
+        <add name="HTTP_X_FORWARDED_PROTO" />
+      </allowedServerVariables>
+      
+      <rules>
+        <!-- HTTPS Redirect -->
+        <rule name="HTTPS Redirect" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions>
+            <add input="{HTTPS}" pattern="^OFF$" />
+          </conditions>
+          <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" />
+        </rule>
+        
+        <!-- Inject authenticated user into header -->
+        <rule name="Reflex Proxy with Auth" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions>
+            <add input="{LOGON_USER}" pattern=".+" />
+          </conditions>
+          <serverVariables>
+            <!-- DOMAIN\username or username@domain.com -->
+            <set name="HTTP_X_REMOTE_USER" value="{LOGON_USER}" />
+            <set name="HTTP_X_FORWARDED_PROTO" value="{REQUEST_SCHEME}" />
+            <set name="HTTP_X_FORWARDED_FOR" value="{REMOTE_ADDR}" />
+          </serverVariables>
+          <action type="Rewrite" url="http://127.0.0.1:3000/{R:1}" />
+        </rule>
+      </rules>
+    </rewrite>
+    
+    <httpErrors existingResponse="PassThrough" />
+  </system.webServer>
+</configuration>

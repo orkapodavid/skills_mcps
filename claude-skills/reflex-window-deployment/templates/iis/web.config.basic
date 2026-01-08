@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  IIS web.config for Reflex reverse proxy
+  Place in IIS site root (e.g., C:\inetpub\myapp\web.config)
+-->
+<configuration>
+  <system.webServer>
+    <!-- Enable WebSocket protocol (CRITICAL for Reflex) -->
+    <webSocket enabled="true" />
+    
+    <!-- URL Rewrite Rules -->
+    <rewrite>
+      <!-- Whitelist server variables for header injection -->
+      <allowedServerVariables>
+        <add name="HTTP_X_FORWARDED_FOR" />
+        <add name="HTTP_X_FORWARDED_PROTO" />
+        <add name="HTTP_X_ORIGINAL_URL" />
+      </allowedServerVariables>
+      
+      <rules>
+        <!-- Force HTTPS -->
+        <rule name="HTTPS Redirect" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions>
+            <add input="{HTTPS}" pattern="^OFF$" />
+          </conditions>
+          <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" redirectType="Permanent" />
+        </rule>
+        
+        <!-- Proxy all requests to Reflex backend -->
+        <rule name="Reflex Proxy" stopProcessing="true">
+          <match url="(.*)" />
+          <serverVariables>
+            <set name="HTTP_X_FORWARDED_PROTO" value="{REQUEST_SCHEME}" />
+            <set name="HTTP_X_FORWARDED_FOR" value="{REMOTE_ADDR}" />
+          </serverVariables>
+          <action type="Rewrite" url="http://127.0.0.1:3000/{R:1}" />
+        </rule>
+      </rules>
+    </rewrite>
+    
+    <!-- Error handling -->
+    <httpErrors existingResponse="PassThrough" />
+  </system.webServer>
+</configuration>

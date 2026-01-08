@@ -1,0 +1,21 @@
+flowchart LR
+    subgraph Internet/Intranet
+        Client[Browser Client]
+    end
+    
+    subgraph IIS["IIS (Port 443)"]
+        SSL[SSL Termination]
+        ARR[ARR Proxy]
+        Auth[Win Auth / Entra]
+    end
+    
+    subgraph Services["Windows Services"]
+        WS1[Reflex App 1<br/>Port 3000]
+        WS2[Reflex App 2<br/>Port 3001]
+    end
+    
+    Client -->|HTTPS| SSL
+    SSL --> Auth
+    Auth --> ARR
+    ARR -->|HTTP localhost| WS1
+    ARR -->|HTTP localhost| WS2

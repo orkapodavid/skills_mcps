@@ -1,0 +1,19 @@
+flowchart TD
+    A[Start: Deploy Reflex on Windows] --> B{Internet Available?}
+    B -->|No - Air-Gapped| C[Phase 1: Windows Authentication]
+    B -->|Yes - Cloud Connected| D{MFA Required?}
+    D -->|Yes| E[Phase 2: Entra ID OIDC]
+    D -->|No - Intranet Only| C
+    C --> F{Service Wrapper Preference?}
+    E --> F
+    F -->|XML Config| G[WinSW]
+    F -->|CLI/GUI| H[NSSM]
+    G --> I[Configure IIS Reverse Proxy]
+    H --> I
+    I --> J{Multi-App?}
+    J -->|Yes - Subdomains| K[app1.corp.com Pattern]
+    J -->|Yes - Subpaths| L[corp.com/app1 Pattern]
+    J -->|No - Single App| M[Direct Proxy]
+    K --> N[Deploy & Validate]
+    L --> N
+    M --> N
