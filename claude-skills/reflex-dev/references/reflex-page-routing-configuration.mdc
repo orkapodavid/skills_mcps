@@ -1,0 +1,380 @@
+# Reflex Page Routing and Configuration
+
+Complete guide to page routing, dynamic paths, navigation, and URL handling in Reflex applications.
+
+## Quick Start
+
+Pages map component-returning functions to URLs. Register pages using `app.add_page()` or the `@rx.page()` decorator:
+
+```python
+import reflex as rx
+
+def index():
+    return rx.text("Root Page")
+
+def about():
+    return rx.text("About Page")
+
+app = rx.App()
+app.add_page(index)        # Available at / and /index
+app.add_page(about)        # Available at /about
+```
+
+Or use decorators:
+
+```python
+@rx.page(route="/", title="My App")
+def index():
+    return rx.text("Home")
+```
+
+## Core Routing Concepts
+
+**Static Routes:**
+- Function name becomes the route by default
+- `index` function is special: available at both `/` and `/index`
+- Nested routes supported: `route="/nested/page"` creates `/nested/page`
+
+**Page Registration:**
+- Use `app.add_page(fn, route=...)` for manual registration
+- Use `@rx.page(route=..., ...)` decorator for inline registration
+- Custom routes override function name: `app.add_page(custom, route="/custom-route")`
+
+---
+
+## Navigation Patterns
+
+**Using Links:**
+Create clickable navigation with `rx.link()`:
+```python
+rx.link("About Page", href="/about")
+rx.link("External Link", href="https://example.com", is_external=True)
+```
+
+**Programmatic Navigation:**
+Redirect from event handlers using `rx.redirect()`:
+```python
+class State(rx.State):
+    def go_to_dashboard(self):
+        return rx.redirect("/dashboard")
+
+rx.button("Go to Dashboard", on_click=State.go_to_dashboard)
+```
+
+**Combined Example:**
+```python
+rx.vstack(
+    rx.link("Docs Library", href="/docs/library"),
+    rx.button("Go to Events", on_click=rx.redirect("/docs/api-reference/special_events")),
+)
+```
+
+---
+
+## Reading Current Route and URL
+
+Access routing information within any `rx.State` using `self.router.page` attributes:
+
+- **`path`** - Route pattern (e.g., `/posts/[id]` for dynamic pages)
+- **`raw_path`** - Actual URL in browser (e.g., `/posts/123`), includes query string
+- **`full_raw_path`** - Complete URL with scheme/host (e.g., `http://localhost:3000/posts/123?q=x`)
+
+**Example:**
+```python
+class State(rx.State):
+    @rx.var
+    def current_url(self) -> str:
+        return self.router.page.full_raw_path
+
+@rx.page(route="/posts/[id]")
+def show_url():
+    return rx.text(State.current_url)
+```
+
+**Best Practice:** Use `raw_path` to read the actual path and query parameters; use `path` to see the routing pattern.
+
+---
+
+## Dynamic Routes
+
+**Demonstrates:**
+- URL pattern matching with variables
+- Dynamic segment extraction
+- Single handler for multiple URLs
+- Flexible route definitions
+
+**Features:**
+Define dynamic segments using square brackets to capture URL parameters:
+- `/users/[id]` - Captures user ID
+- `/products/[category]` - Captures product category
+- `/post/[pid]` - Captures post ID
+
+**Access Dynamic Values:**
+Dynamic segments are automatically exposed on `rx.State.<segment_name>`:
+
+```python
+@rx.page(route="/post/[pid]")
+def post():
+    # Dynamic pid from URL: /post/5 -> "5"
+    return rx.heading(rx.State.pid)
+
+app = rx.App()
+```
+
+**URL Mapping Examples:**
+- `/post/5` → `rx.State.pid == "5"`
+- `/post/xyz` → `rx.State.pid == "xyz"`
+- `/post/` → empty string `""`
+
+**Best For:** User profiles, product details, blog posts, any page requiring ID-based routing
+
+### Registration Order (Important)
+
+When using `app.add_page()` with both static and dynamic routes for the same function, register dynamic routes FIRST:
+
+**✅ Correct:**
+```python
+app.add_page(index, route="/page/[page_id]", on_load=DynamicState.on_load)
+app.add_page(index, route="/static/x",    on_load=DynamicState.on_load)
+app.add_page(index)  # default
+```
+
+**❌ Incorrect:**
+```python
+app.add_page(index, route="/static/x",    on_load=DynamicState.on_load)
+app.add_page(index)  # default
+app.add_page(index, route="/page/[page_id]", on_load=DynamicState.on_load)  # Won't work!
+```
+
+---
+
+## Catch-All Routes
+
+**Demonstrates:**
+- Matching multiple URL segments
+- Optional path components
+- Deep URL hierarchies
+- Flexible routing patterns
+
+**Features:**
+- Syntax: `[[...splat]]` at the END of the pattern
+- Name MUST be `splat`
+- Optional catch-all: segment may be absent or contain multiple parts
+- Captures all trailing URL segments as an array
+
+**Example:**
+```python
+class State(rx.State):
+    @rx.var
+    def user_post(self) -> str:
+        args = self.router.page.params
+        usernames = args.get("splat", [])
+        return f"Posts by {', '.join(usernames)}"
+
+@rx.page(route="/users/[id]/posts/[[...splat]]")
+def post():
+    return rx.center(rx.text(State.user_post))
+
+app = rx.App()
+```
+
+**Matches:**
+- `/users/2/posts/john/`
+- `/users/1/posts/john/doe/`
+- `/users/9/posts/` (empty optional catch-all)
+
+**Best For:** File browsers, nested categories, documentation sites, multi-level navigation
+
+### Validation Rules
+
+**✅ Valid Patterns:**
+- `/users/posts` - Static route
+- `/products/[category]` - Single dynamic segment
+- `/users/[username]/posts/[id]` - Multiple dynamic segments
+- `/users/[[...splat]]` - Catch-all at end
+- `/products/[category]/[[...splat]]` - Dynamic + catch-all
+
+**❌ Invalid Patterns:**
+- `/users/[[...splat]]/posts` - Catch-all not at end
+- `/products/[category]/[[...splat]]/[[...splat]]` - Multiple catch-alls
+
+**Accessing Captured Values:**
+Read captured segments using `self.router.page.params` inside `rx.State`:
+```python
+parts = self.router.page.params.get("splat", [])
+```
+
+---
+
+## Query Parameters
+
+**Demonstrates:**
+- URL query string parsing
+- Search filters and pagination
+- State-based query handling
+
+**Reading Query Parameters:**
+Access query strings via `self.router.page.raw_path`:
+
+```python
+class State(rx.State):
+    @rx.var
+    def search_query(self) -> str:
+        # Parse query from raw_path (e.g., /items?q=chips)
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.router.page.raw_path).query)
+        return qs.get("q", [""])[0]
+```
+
+**Best For:** Search pages, filters, pagination, tracking parameters
+
+---
+
+## Page Metadata and SEO
+
+**Demonstrates:**
+- SEO optimization
+- Social media previews
+- Custom metadata
+- Page-specific configuration
+
+**Features:**
+Set metadata using `@rx.page()` decorator:
+
+```python
+meta = [
+    {"name": "theme_color", "content": "#FFFFFF"},
+    {"char_set": "UTF-8"},
+    {"property": "og:url", "content": "url"},
+]
+
+@rx.page(
+    title="My Beautiful App",
+    description="A beautiful app built with Reflex",
+    image="/splash.png",
+    meta=meta,
+)
+def index():
+    return rx.text("A Beautiful App")
+```
+
+**Metadata Options:**
+- `title` - Page title (browser tab, SEO)
+- `description` - Meta description for SEO
+- `image` - Social media preview image
+- `meta` - Custom meta tags array
+
+**Best For:** SEO optimization, social sharing, branding
+
+---
+
+## Complete Example: Dynamic Detail Page with Deep Subpaths
+
+**Demonstrates:**
+- Combined dynamic and catch-all routing
+- Query parameter parsing
+- Multi-level URL structures
+- Complete state integration
+
+**Complete Implementation:**
+```python
+import reflex as rx
+from urllib.parse import urlparse, parse_qs
+
+class DetailState(rx.State):
+    @rx.var
+    def id(self) -> str:
+        return rx.State.id  # from /items/[id]
+
+    @rx.var
+    def deep(self) -> str:
+        parts = self.router.page.params.get("splat", [])
+        return "/".join(parts)
+
+    @rx.var
+    def q(self) -> str:
+        qs = parse_qs(urlparse(self.router.page.raw_path).query)
+        return qs.get("q", [""])[0]
+
+@rx.page(route="/items/[id]/[[...splat]]")
+def item_detail():
+    return rx.vstack(
+        rx.text(f"id={DetailState.id}"),
+        rx.text(f"deep={DetailState.deep}"),
+        rx.text(f"q={DetailState.q}"),
+    )
+
+app = rx.App()
+```
+
+**URL Mapping Examples:**
+- `/items/42/` → `id=42`, `deep=""`, `q=""`
+- `/items/42/specs/dimensions?q=mm` → `id=42`, `deep="specs/dimensions"`, `q="mm"`
+
+**Best For:** Product catalogs, documentation sites, file browsers with filtering
+
+---
+
+## Best Practices
+
+### Route Registration
+- Register dynamic routes before static routes when using same handler
+- Use consistent registration method (`@rx.page` or `app.add_page`)
+- Keep dynamic segment names simple and descriptive
+
+### Routing Patterns
+- Choose correct pattern: static, `[param]`, or `[[...splat]]`
+- Place catch-all `[[...splat]]` only at the end
+- Avoid multiple catch-alls in single route
+
+### State Access
+- Read dynamic params via `rx.State.<name>`
+- Read catch-all via `self.router.page.params['splat']`
+- Use `router.page.raw_path` for full URL + queries
+- Use `router.page.path` for route pattern
+
+### Navigation
+- Use `rx.link` for standard navigation
+- Use `rx.redirect` from events for programmatic navigation
+- Remember `index` is accessible at both `/` and `/index`
+
+### Metadata
+- Add metadata with `@rx.page(title=..., description=..., image=..., meta=...)`
+- Optimize for SEO and social sharing
+
+---
+
+## Quick Reference Checklist
+
+**Before Creating Routes:**
+- [ ] Choose route type: static, dynamic `[param]`, or catch-all `[[...splat]]`
+- [ ] Plan registration order (dynamic first if mixing)
+- [ ] Design URL structure and segments
+
+**During Implementation:**
+- [ ] Use `@rx.page()` or `app.add_page()` consistently
+- [ ] Access dynamic values via `rx.State.<segment_name>`
+- [ ] Parse query parameters from `router.page.raw_path`
+- [ ] Add navigation with `rx.link()` and `rx.redirect()`
+
+**After Implementation:**
+- [ ] Add page metadata for SEO
+- [ ] Test all URL patterns
+- [ ] Verify catch-all placement
+- [ ] Validate navigation flows
+
+---
+
+## Additional Resources
+
+### Official Documentation
+- **Dynamic Routing**: https://reflex.dev/docs/pages/dynamic-routing/
+- **Pages Overview**: https://reflex.dev/docs/pages/overview/
+- **Router Attributes**: https://reflex.dev/docs/utility-methods/router-attributes/
+- **Plugins**: https://reflex.dev/docs/api-reference/plugins/
+
+### Related Examples
+Check `examples/` directory for working implementations:
+- Multi-page applications
+- Form submissions with redirects
+- Dynamic data views
