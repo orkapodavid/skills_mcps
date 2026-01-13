@@ -1,0 +1,18 @@
+[project]
+name = "windows-share-skill"
+version = "0.1.0"
+description = "Python agent skill to read/write Windows shared drives with a service account"
+authors = [{name = "AnyGen", email = "orkapodjdj@gmail.com"}]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "smbprotocol>=1.13.0",
+    "smbclient>=0.7.0",
+]
+
+[project.optional-dependencies]
+win = ["pywin32>=306"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["skill*"]

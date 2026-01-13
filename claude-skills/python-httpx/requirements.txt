@@ -1,0 +1,3 @@
+httpx>=0.27
+# Optional extras used by examples
+authlib>=1.3.0
