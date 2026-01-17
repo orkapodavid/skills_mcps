@@ -75,4 +75,34 @@ C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.webServer/prox
     <httpErrors existingResponse="PassThrough" />
   </system.webServer>
 </configuration>
+
+## Deep Dive: The web.config Explained
+
+The `web.config` file is the brain of the IIS deployment. Understanding its logic is critical for debugging.
+
+### Rule Logic Analysis
+
+#### 1. The WebSocket Rule
+```xml
+<rule name="ReflexEvents" stopProcessing="true">
+    <match url="^_event/(.*)" />
+    <action type="Rewrite" url="http://127.0.0.1:8000/_event/{R:1}" />
+</rule>
+```
+*   **The Match:** `^_event/(.*)` captures all traffic destined for the event handler.
+*   **StopProcessing="true":** This is the most critical flow control mechanism. It functions like a `break` statement in a loop. If a request matches the WebSocket rule, we must stop processing. If we don't, the request might fall through to subsequent rules (like the SPA fallback), rewriting it to `index.html`. Returning HTML when the client expects a WebSocket upgrade (101) causes the connection to fail.
+
+#### 2. Server Variables
+```xml
+<serverVariables>
+    <set name="HTTP_X_FORWARDED_HOST" value="{HTTP_HOST}" />
+    <set name="HTTP_X_FORWARDED_PROTO" value="https" />
+</serverVariables>
+```
+*   **Purpose:** When IIS acts as a proxy, it might strip headers or replace the Host header with `localhost`. Reflex/FastAPI backends use the Host header to validate CORS. By explicitly setting `HTTP_X_FORWARDED_HOST`, we ensure the backend knows the real domain the user visited.
+
+#### 3. The SPA Fallback Rule
+Reflex apps are Single Page Applications (SPAs).
+*   **Scenario:** A user navigates to `/settings`. This file does not exist on disk. IIS defaults to 404.
+*   **Resolution:** Logic checks `IsFile` (negated) and `IsDirectory` (negated). If the request is for a phantom path, rewrite it to `/` (which serves `index.html`). The React router then loads and renders the correct view.
 ```

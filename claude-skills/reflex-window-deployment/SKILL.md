@@ -1,12 +1,11 @@
 ---
-name: Reflex Windows Deployment
+name: reflex-windows-deployment
 description: This skill should be used when the user asks to "deploy Reflex on Windows", "deploy on IIS", "setup Windows Authentication for Reflex", "configure Entra ID for Reflex", "use WinSW or NSSM", or "air-gapped deployment".
-version: 0.1.0
 ---
 
 # Reflex Windows Deployment
 
-**Bottom Line Up Front:** This production-ready skill folder enables developers to deploy Reflex (Python) full-stack applications on Windows Server 2016/2019/2022 using WinSW or NSSM service wrappers behind IIS reverse proxy with enterprise authentication. The two-phase authentication approach supports air-gapped intranets (Windows Auth/Kerberos) and cloud-connected environments (Microsoft Entra ID/OIDC) with copy-paste configurations, validated templates, and comprehensive troubleshooting guidance.
+**Bottom Line Up Front:** This production-ready skill enables developers to deploy Reflex (Python) full-stack applications on Windows Server 2016/2019/2022 using WinSW or NSSM service wrappers behind IIS reverse proxy with enterprise authentication. The two-phase authentication approach supports air-gapped intranets (Windows Auth/Kerberos) and cloud-connected environments (Microsoft Entra ID/OIDC) with validated templates and comprehensive troubleshooting guidance.
 
 ## Decision Tree: Choosing Your Deployment Path
 
@@ -72,7 +71,7 @@ flowchart LR
 
 ## Additional Resources
 
-### Documentation
+### Core Documentation
 - **`docs/core/reflex-application-preparation.md`** - rxconfig.py and build commands
 - **`docs/core/windows-service-management.md`** - WinSW and NSSM configuration
 - **`docs/core/iis-reverse-proxy-setup.md`** - IIS, ARR, and URL Rewrite setup
@@ -81,8 +80,11 @@ flowchart LR
 - **`docs/core/multi-app-deployment-strategy.md`** - Hosting multiple apps
 - **`docs/core/air-gapped-deployment-guide.md`** - Offline deployment
 - **`docs/core/deployment-checklist.md`** - Validation checklists
-- **`docs/advanced/troubleshooting-guide.md`** - Solving common errors
+
+### Advanced Documentation
+- **`docs/advanced/troubleshooting-guide.md`** - Solving common errors and Heuristic Matrix
 - **`docs/advanced/security-hardening.md`** - Security best practices
+- **`docs/advanced/maintenance-operations.md`** - Observability, PerfMon, and logging
 
 ### Templates
 - **`templates/winsw/winsw.xml`** - WinSW configuration
