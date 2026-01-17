@@ -25,14 +25,14 @@ Before making changes, analyze the codebase for architectural violations using t
 ### 2. Planning the Refactor
 Develop a plan based on the audit.
 *   **Architecture:** Propose a **Domain-Driven Package Structure** (separate folders for `state`, `pages`, `components`, `models`).
-*   **State Decomposition:** Plan how to split the monolithic state into **Substates** or **Component States**.
+*   **State Decomposition:** Plan how to split the monolithic state into **Flat Substates** (preferred) or **Component States**.
 *   **Verification Strategy:** Define how you will verify changes (Unit Tests, Playwright E2E).
 
 ### 3. Execution (The Refactor)
 Execute the changes incrementally.
 *   **Structural Changes:** Move files to the new package structure. Resolve circular dependencies.
-*   **State Extraction:** Create `substate.py` files. Use `get_state` for inter-state communication.
-*   **UI Optimization:** Extract repeating UI patterns into components with typed props (`rx.Var`). Apply `@lru_cache` for memoization.
+*   **State Extraction:** Create `substate.py` files. Use `get_state` for inter-state communication and `get_var_value` for performance.
+*   **UI Optimization:** Extract repeating UI patterns into components. Use `rx.ComponentState` for isolated widget logic.
 *   **Event Optimization:** Convert blocking handlers to `async` and use background tasks where appropriate.
 
 ### 4. Verification
@@ -40,21 +40,30 @@ Ensure the refactor didn't break functionality.
 *   **Run Tests:** Execute unit tests for logic and Playwright tests for UI interaction.
 *   **Static Analysis:** Run `ruff` and `mypy` to enforce type safety and code style.
 
+## Modern Backend Practices
+
+Reflex event handlers run on the backend (FastAPI). Apply modern Python asynchronous patterns:
+
+*   **Async-Safe Wrappers:** Offload blocking I/O (like `pyodbc` or `sqlalchemy` sync calls) to threads using `await asyncio.to_thread(sync_func)`.
+*   **Non-Blocking Networking:** Replace `requests` with `httpx.AsyncClient` for external API calls within event handlers.
+*   **Strict Validation:** Use Pydantic V2 models (`model_validate_json`) to validate data entering the system from external APIs before loading it into State.
+*   **Performance:** Use `get_var_value(State.var)` instead of `get_state(State)` when only reading a single value to avoid loading the entire state object.
+
 ## Resources
 
 ### Core Refactoring Guide
 *   **`references/refactoring_guide.md`**: The comprehensive guide covering:
     *   Dual-Phase Execution Model details.
-    *   Variable System Proxy Logic.
-    *   State Decomposition strategies (Substates, Mixins).
+    *   State Decomposition strategies (Substates, Mixins, SharedState).
     *   UI Component Refactoring (Functional decomposition, `rx.ComponentState`).
     *   Event Handling Optimization (Concurrency, Debouncing).
     *   Verification Strategies (Testing, Linting).
 
 ### Reflex Development Reference
 For specific syntax, component usage, or standard patterns, refer to the **reflex-dev** skill.
-*   **`../reflex-dev/SKILL.md`**: Use this to locate specific documentation for State, Events, Components, etc.
-*   **`../reflex-dev/references/patterns.md`**: Check for standard patterns like Authentication or CRUD to align the refactor with best practices.
+*   **`../reflex-dev/SKILL.md`**: Topic Router for specific documentation.
+*   **`../reflex-dev/references/reflex-state-structure.mdc`**: **Critical** for understanding Substates, ComponentState, and performance.
+*   **`../reflex-dev/references/patterns.md`**: Standard patterns for Auth, CRUD, and Real-time updates.
 
 ## Expert Persona & Guidelines
 
@@ -63,5 +72,6 @@ Adopt the role of a **Principal Software Architect** specializing in Reflex.
 *   **Strictly enforce** the separation of Compile-Time UI and Runtime State.
 *   **Never allow** Python runtime logic in UI functions.
 *   **Always decompose** monolithic States into Substates or Mixins.
+*   **Prefer** "Flat Substates" (inheriting from `rx.State`) over deep inheritance hierarchies.
 *   **Always verify** changes with a defined testing strategy.
 *   **Enforce types** using `rx.Field` and standard Python type hints.
