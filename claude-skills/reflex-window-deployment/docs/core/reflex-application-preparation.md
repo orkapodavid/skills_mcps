@@ -1,5 +1,23 @@
 # Reflex Application Preparation
 
+## Architecture Context: The Dual-Natured Build Artifact
+
+Reflex is not a standard Python web application; it is a distributed system. Understanding the bifurcation of its build process is critical for diagnosing deployment failures.
+
+### 1. The Frontend (Client-Side)
+When you run `reflex export`, the framework compiles the Python UI code into a React application (Next.js). This generates static assets (HTML, JS, CSS) in `.web/_static`.
+*   **Implication for IIS:** IIS acts purely as a static file server for these assets. It does not execute Python to serve the UI. This leverages IIS kernel-mode caching.
+
+### 2. The Backend (Server-Side)
+The application logic and state management reside in a Python process (FastAPI/Uvicorn).
+*   **Implication for IIS:** IIS cannot execute this directly. The backend must run as a separate, persistent Windows Service. IIS acts as a Reverse Proxy, forwarding API requests and WebSockets to this service.
+
+### 3. The State Management Mechanism
+Reflex keeps state on the server. The client establishes a WebSocket connection to `/_event`.
+*   **Critical Path:** If the WebSocket connection fails, the app loads (static HTML) but is non-interactive.
+
+---
+
 ## rxconfig.py Production Configuration
 
 ```python

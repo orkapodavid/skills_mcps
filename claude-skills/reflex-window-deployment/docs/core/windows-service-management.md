@@ -17,7 +17,7 @@
   
   <!-- === Executable Configuration === -->
   <executable>%BASE%\.venv\Scripts\python.exe</executable>
-  <arguments>-m reflex run --env prod --backend-only --backend-port 8000</arguments>
+  <arguments>-m uvicorn app.app:app --host 127.0.0.1 --port 8000</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   
   <!-- === Environment Variables === -->
@@ -112,7 +112,8 @@ New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 Write-Host "Installing service: $ServiceName" -ForegroundColor Cyan
 
 # Install service
-& $NssmPath install $ServiceName $VenvPython "-m" "reflex" "run" "--env" "prod" "--backend-only" "--backend-port" "$Port"
+# Note: Using uvicorn directly is recommended over 'reflex run' for production stability
+& $NssmPath install $ServiceName $VenvPython "-m" "uvicorn" "app.app:app" "--host" "127.0.0.1" "--port" "$Port"
 
 # Application settings
 & $NssmPath set $ServiceName AppDirectory $AppPath
