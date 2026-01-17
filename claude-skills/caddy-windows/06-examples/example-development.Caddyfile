@@ -1,0 +1,5 @@
+# Example: Development (HTTPS localhost)
+
+localhost {
+  respond "Hello secure dev!"
+}

@@ -1,0 +1,12 @@
+# Example: API Gateway
+
+api.local.test {
+  @auth path /auth/*
+  handle @auth {
+    reverse_proxy localhost:7001
+  }
+  @users path /users/*
+  handle @users {
+    reverse_proxy localhost:7002
+  }
+}

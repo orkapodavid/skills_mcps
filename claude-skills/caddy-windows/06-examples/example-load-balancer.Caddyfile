@@ -1,0 +1,8 @@
+# Example: Load Balancer
+
+:8080 {
+  reverse_proxy localhost:3001 localhost:3002 localhost:3003 {
+    lb_policy round_robin
+    health_uri /healthz
+  }
+}

@@ -1,0 +1,7 @@
+# Example: Basic Config
+
+# Site on :8080 serving static files
+:8080 {
+  root * C:\\sites\\demo
+  file_server
+}
