@@ -67,10 +67,10 @@ The agent must possess the capability to perform **Cohesion Analysis** on the va
 
 For example, if the agent detects variables like `user_token`, `email`, and `is_logged_in` alongside methods like `login()` and `logout()`, it should generate a refactoring plan to move these into an `AuthState` class. Crucially, the agent must understand the inheritance model:
 
-*   **Independent Substates:** Classes that inherit directly from `rx.State` (e.g., `class AuthState(rx.State)`). This is preferred for performance as it keeps the state graph flat.
-*   **Hierarchical Substates:** Classes that inherit from the main state. This allows them to access parent vars but increases the payload size during updates since the parent state is often re-evaluated.
+*   **Flat Substates (Preferred):** Classes that inherit directly from `rx.State` (e.g., `class AuthState(rx.State)`). This creates independent state graphs that only load when specifically accessed. This is the **recommended pattern for performance**.
+*   **Hierarchical Substates:** Classes that inherit from the main state or other substates. This allows them to access parent vars but increases the payload size during updates since the parent state is often re-evaluated.
 
-The agent must advise on the trade-offs: "Prefer flat substates to minimize the hydration payload, using `get_state` for cross-communication only when necessary".
+The agent must advise on the trade-offs: "Prefer flat substates (inheriting from `rx.State`) to minimize the hydration payload. Use `get_state` for cross-communication."
 
 ### 3.2 Inter-State Communication Patterns
 
@@ -88,13 +88,25 @@ user_state.region
 
 The agent must explicitly check that the method engaging in this communication is defined as `async`, otherwise the `await` keyword will raise a syntax error.
 
-For performance optimization, if only a single variable is needed and no mutation is required, the agent should recommend `await self.get_var_value(UserState.region)` instead of loading the full state object. This demonstrates a nuanced understanding of Reflex's internal overhead.
+**Performance Pattern: `get_var_value`**
+
+For performance optimization, if only a single variable is needed and no mutation is required, the agent should recommend `await self.get_var_value(UserState.region)` instead of loading the full state object. This prevents the server from deserializing the entire `UserState` when only one string is needed.
 
 ### 3.3 Mixins for Cross-Cutting Concerns
 
 Reflex offers a mixin pattern for sharing functionality across unrelated state classes, such as common error handling, toast notification triggers, or theme preferences. The agent should be trained to identify duplicated code blocks across different states—a violation of the DRY (Don't Repeat Yourself) principle—and refactor them into a `StateMixin`.
 
 The specific technical requirement for the agent is to verify that the mixin class inherits from `rx.State` and sets the `mixin=True` flag in its definition. Failure to set this flag can lead to the mixin being instantiated as a standalone state, which is not the intended behavior.
+
+### 3.4 Shared State for Collaboration
+
+When refactoring applications that require real-time collaboration (e.g., multi-user chat, shared whiteboards), the agent should recommend `rx.SharedState`. Unlike standard states which are isolated per-user, `SharedState` allows synchronization across clients connected to the same "room" or token.
+
+**Refactoring Strategy:**
+1.  Identify state that must be consistent across users (e.g., `document_content`).
+2.  Move this state to a class inheriting from `rx.SharedState`.
+3.  Use private states (inheriting from `rx.State`) for user-specific views (e.g., `my_cursor_position`).
+4.  Link the shared state using `await shared_state._link_to(room_id)`.
 
 ## 4. UI Component Refactoring: Precision and Reusability
 
@@ -112,6 +124,8 @@ A common anti-pattern in Reflex is using the global State to manage ephemeral UI
 
 The agent must possess the skill to identify these ephemeral variables and refactor them into Component State. This involves creating a subclass of `rx.ComponentState` attached to the component instance. This encapsulation ensures that each instance of the component maintains its own isolated state, significantly enhancing reusability and testability. The agent must rewrite the component to access `cls.State.var_name` instead of `GlobalState.var_name`.
 
+**Critical Warning:** The agent must strictly advise **AGAINST** using `rx.ComponentState` inside `rx.foreach`. `ComponentState` is designed for static component instances; using it inside a dynamic loop will result in all loop items sharing the *same* single state instance, breaking the expected behavior. For lists, use standard State with a dictionary keyed by item ID.
+
 ### 4.3 Memoization and Performance
 
 In large applications, re-evaluating the component tree logic during every compile step or state update can be costly. The agent should recommend the application of the `@lru_cache` decorator to pure component functions. This is a best practice in Reflex for optimizing the graph generation phase. The agent must verify that the function arguments are hashable (e.g., using tuples instead of lists) to be compatible with LRU caching.
@@ -120,15 +134,38 @@ In large applications, re-evaluating the component tree logic during every compi
 
 The responsiveness of a Reflex application is dictated by the efficiency of its event handlers. Since these handlers run on the server, blocking operations can freeze the entire user session or even the server process if not managed correctly.
 
-### 5.1 Async Concurrency and Background Tasks
+### 5.1 Async-Safe Wrappers and Concurrency
 
-The agent must analyze event handlers for "blocking" signatures—such as `time.sleep()`, heavy computation loops, or synchronous network requests (e.g., `requests.get`). The refactoring advice must be to convert these into **Asynchronous Handlers** using `async def` and non-blocking libraries (e.g., `httpx` instead of `requests`).
+The agent must analyze event handlers for "blocking" signatures—such as `time.sleep()`, heavy computation loops, or synchronous network requests (e.g., `requests.get` or `pyodbc.execute`).
+
+**The Async-Safe Wrapper Pattern:**
+The agent must refactor blocking synchronous calls using `asyncio.to_thread`. This ensures the main event loop remains responsive.
+
+```python
+# Before (Blocking)
+def load_data(self):
+    data = sync_db_call()
+
+# After (Refactored)
+async def load_data(self):
+    data = await asyncio.to_thread(sync_db_call)
+```
+
+**Networking:**
+For HTTP requests, the agent must recommend replacing `requests` with `httpx.AsyncClient`.
+
+```python
+async with httpx.AsyncClient() as client:
+    response = await client.get("https://api.example.com")
+```
+
+### 5.2 Background Tasks
 
 For long-running operations that should not block the UI (e.g., generating a report or processing a large dataset), the agent must recommend converting the handler into a **Background Task** using the `@rx.event(background=True)` decorator. This allows the UI to remain responsive while the task executes.
 
 **Critical Safety Check:** When refactoring to background tasks, the agent must insert a specific context manager: `async with self:`. This acquires the state lock, ensuring that state mutations inside the background task do not cause race conditions with other events. The agent must be trained to flag any background task that mutates state outside of this context block as a critical bug.
 
-### 5.2 Debouncing and Throttling
+### 5.3 Debouncing and Throttling
 
 User interactions like typing in a search bar or resizing a window can trigger a flood of events sent to the backend. The agent should identify these high-frequency triggers and apply **Event Actions** to optimize performance.
 
@@ -137,15 +174,33 @@ User interactions like typing in a search bar or resizing a window can trigger a
 
 This optimization prevents server overload and ensures a smoother user experience.
 
-### 5.3 Decentralized Event Handlers
+### 5.4 Decentralized Event Handlers
 
 In the refactoring of large-scale applications, maintaining all event handlers within the State class file can lead to unmanageable file sizes. The agent should leverage the **Decentralized Event Handler** pattern, identifying logical groups of handlers and moving them to separate modules. These handlers are defined as standalone functions decorated with `@rx.event` and accept the state instance as their first argument. This promotes a cleaner separation of concerns and allows for better code organization by feature.
 
-## 6. Verification Strategy: Testing Skills for Agents
+## 6. Modern Data Handling and Validation
+
+Refactoring often involves cleaning up how the application interacts with external data. The agent must guide the transition from ad-hoc dictionaries to structured, validated models.
+
+### 6.1 Pydantic V2 Integration
+
+Reflex is built on Pydantic. The agent should refactor loose dictionary passing to Pydantic V2 models.
+
+*   **Ingestion:** When receiving data from an API, use `Model.model_validate_json(response.text)` instead of `json.loads`. This ensures that bad data is caught at the boundary, not deep in the UI logic.
+*   **Type Safety:** Use these Pydantic models as types for State variables (`items: list[ProductModel]`). This allows Reflex to generate better frontend code and allows IDEs to provide autocomplete.
+
+### 6.2 SQLModel Integration
+
+Reflex uses SQLModel (a wrapper around SQLAlchemy and Pydantic) for its ORM. The agent should identify any raw SQL queries or usage of plain dictionaries for data storage and refactor them into `rx.Model` classes.
+
+*   **Requirement:** The models must be defined in the `models/` package (as per Section 2).
+*   **Skill:** The agent must verify that these models inherit from `rx.Model` and `table=True`. It should also advise on generating migration scripts (`reflex db makemigrations`) whenever the model structure is altered during refactoring.
+
+## 7. Verification Strategy: Testing Skills for Agents
 
 The mandate to refactor "without breaking features" implies a strict requirement for regression testing. The agent cannot simply generate code; it must also generate the verification harness. Reflex supports both unit testing of state logic and end-to-end (E2E) testing of the full application.
 
-### 6.1 Unit Testing State Logic
+### 7.1 Unit Testing State Logic
 
 Reflex State classes are, fundamentally, Python classes. This allows them to be tested using standard frameworks like `pytest`. The agent must be skilled in generating test cases that isolate the business logic from the UI.
 
@@ -160,7 +215,7 @@ Reflex State classes are, fundamentally, Python classes. This allows them to be 
 
 The agent must specifically handle the `rx.State` initialization quirk: essentially, Reflex creates a new instance per token. For testing, the agent should advise using a test fixture that resets the state or mocks the session context to ensure test isolation.
 
-### 6.2 End-to-End Testing with Playwright
+### 7.2 End-to-End Testing with Playwright
 
 While unit tests verify logic, they do not verify that the UI correctly triggers that logic or updates in response. The agent must recommend and scaffold Playwright tests for integration verification.
 
@@ -169,22 +224,22 @@ The agent's "Playwright Skill" involves:
 *   **Selector Strategy:** Using robust selectors (e.g., `get_by_role`, `get_by_text`) rather than brittle CSS paths.
 *   **Async Assertions:** Using `expect(locator).to_have_text()` which auto-waits for the WebSocket update to propagate to the DOM. This is crucial in Reflex, as updates are not instantaneous. The agent must avoid `time.sleep()` in favor of these polling assertions to prevent flaky tests.
 
-### 6.3 Snapshot Testing
+### 7.3 Snapshot Testing
 
 To ensure the UI layout remains "Pixel Perfect" (or at least structurally identical) during refactoring, the agent should employ snapshot testing. This involves rendering the component tree and comparing the resulting HTML string against a known "good" baseline. While Reflex doesn't have a built-in snapshot tool like Jest, the agent can simulate this by asserting the `str(component)` output matches a stored string file, verifying that the compilation output hasn't shifted unexpectedly.
 
-## 7. Static Analysis and Tooling: Enforcing Clean Code
+## 8. Static Analysis and Tooling: Enforcing Clean Code
 
 To satisfy the requirement of keeping code "clean," the agent must go beyond architectural advice and enforce syntactic and semantic standards through tooling.
 
-### 7.1 Type Safety with `rx.Field`
+### 8.1 Type Safety with `rx.Field`
 
 Python's dynamic nature can lead to runtime errors in the frontend if types are mismatched (e.g., trying to map over a string instead of a list). The agent must enforce the use of `rx.Field` for all state variables.
 
 *   **Skill:** The agent translates standard type hints (`x: int = 0`) to Reflex fields (`x: rx.Field[int] = rx.field(0)`).
 *   **Rationale:** This explicit typing helps the Reflex compiler (and IDEs) understand the allowable operations on the variable in the frontend context (e.g., showing `to_string()` for ints vs `lower()` for strings).
 
-### 7.2 Linter Configuration (Ruff & Mypy)
+### 8.2 Linter Configuration (Ruff & Mypy)
 
 The agent should assume the role of a DevOps engineer and configure Ruff for linting. Ruff is preferred for its speed and comprehensive rule set (replacing Flake8, Isort, and Black).
 
@@ -195,21 +250,6 @@ The agent should assume the role of a DevOps engineer and configure Ruff for lin
 
 For static type checking, the agent must configure Mypy. Crucially, it must handle the `rx.Var` proxy types. The agent may need to generate a `mypy.ini` that suppresses specific errors related to Reflex's dynamic proxy behaviors or suggest using `cast()` in complex logic to satisfy the type checker.
 
-## 8. Data Persistence and Integration
-
-Refactoring often involves cleaning up how the application interacts with data. The agent must guide the transition from ad-hoc dictionaries to structured SQLModel classes.
-
-### 8.1 SQLModel Integration
-
-Reflex uses SQLModel (a wrapper around SQLAlchemy and Pydantic) for its ORM. The agent should identify any raw SQL queries or usage of plain dictionaries for data storage and refactor them into `rx.Model` classes.
-
-*   **Requirement:** The models must be defined in the `models/` package (as per Section 2).
-*   **Skill:** The agent must verify that these models inherit from `rx.Model` and `table=True`. It should also advise on generating migration scripts (`reflex db makemigrations`) whenever the model structure is altered during refactoring.
-
-### 8.2 Wrapping External Components
-
-If the project uses inline JavaScript or raw HTML for custom functionality, the agent should suggest wrapping these in a proper Python `rx.Component` class. This involves defining a subclass of `rx.Component`, specifying the library dependencies, and defining the `add_custom_code` or `add_hooks` methods to inject necessary JS. This encapsulates the "dirty" external code behind a clean Python interface.
-
 ## 9. Developing the "Reflex Expert" Persona
 
 To operationalize these technical requirements into an LLM, one must construct a system prompt that embodies the "Reflex Expert." This persona is not merely a coder but a strict enforcer of the Reflex architecture.
@@ -219,7 +259,7 @@ To operationalize these technical requirements into an LLM, one must construct a
 *   **Role:** You are a Principal Software Architect specializing in the Reflex framework.
 *   **Directive:** Refactor code to be modular, type-safe, and testable.
 *   **Constraint 1 (Architecture):** You strictly enforce the separation of Compile-Time UI and Runtime State. You never allow Python runtime logic in UI functions.
-*   **Constraint 2 (State):** You decompose monolithic States into Substates or Mixins. You strictly use `get_state` for inter-state communication.
+*   **Constraint 2 (State):** You decompose monolithic States into Flat Substates or Mixins. You strictly use `get_state` for inter-state communication.
 *   **Constraint 3 (Verification):** You never refactor without first defining a verification strategy (Unit Tests or Playwright).
 *   **Constraint 4 (Clean Code):** You enforce `rx.Field` typing and Ruff linter standards.
 
@@ -232,9 +272,9 @@ When presented with a code snippet, the agent should follow this internal decisi
 3.  **Plan:** Propose a directory structure change (if needed).
 4.  **Test Scaffold:** Generate the Playwright test for the current feature.
 5.  **Refactor:**
-    *   Extract State.
-    *   Extract Components.
-    *   Apply Types.
+    *   Extract State (using Flat Substates where possible).
+    *   Extract Components (using `rx.ComponentState` for widgets).
+    *   Apply Types (Pydantic models and `rx.Field`).
 6.  **Verify:** Confirm tests still pass (in theory) and run the linter.
 
 ## 10. Conclusion
