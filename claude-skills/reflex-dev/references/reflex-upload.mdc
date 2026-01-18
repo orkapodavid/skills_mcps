@@ -1,0 +1,454 @@
+---
+description: Comprehensive guide to Reflex file upload patterns using rx.upload() - native upload component, server-side file handling, validation, security, and custom storage
+globs: ["**/*.py"]
+---
+
+# Reflex File Upload Patterns
+
+Implement file uploads in Reflex using the native `rx.upload()` component with server-side file handling. This reference covers PDF uploads with custom storage paths, validation, and security patterns.
+
+## Overview
+
+Reflex's `rx.upload()` component:
+- Renders file selector UI (single or multiple files)
+- Posts files to Reflex's reserved `/_upload` backend route
+- Triggers `on_upload` event handler with file metadata array
+- Allows server-side processing and custom storage location
+
+## Key Concepts
+
+**Upload Flow:**
+1. User selects file(s) via `rx.upload()` component
+2. Browser posts to `/_upload` (Reflex's reserved route)
+3. Reflex stores files temporarily
+4. `on_upload` handler receives metadata with temp file location
+5. Handler moves/processes files to custom destination
+
+**Why Native Upload:**
+- No custom API endpoints required
+- Version-aligned with Reflex runtime
+- Python-only ergonomics
+- Integrated with Reflex state management
+
+## Reference Links
+
+- Reflex API routes (reserved `/_upload` endpoint): https://reflex.dev/docs/api-routes/overview/
+- Reflex Changelog (upload size limits): https://build.reflex.dev/changelog/
+- Note: Payload structure varies by Reflex version; use runtime logging for inspection
+
+---
+
+## Architecture Pattern
+
+**Recommended Structure:**
+
+---
+
+```
+app/
+├─ pages/
+│  └─ upload_page.py        # UI with rx.upload() component
+├─ state/
+│  └─ upload_state.py       # Event handler + file processing
+└─ /data/uploads/           # Custom storage (server-writable)
+```
+
+**Storage Location Considerations:**
+- Place upload directory outside repository in production
+- Ensure Reflex process has write permissions
+- Use absolute paths or configuration-based paths
+- Consider volume mounts for containerized deployments
+
+---
+
+## Server-Side Implementation
+
+### Event Handler Pattern
+
+The `on_upload` handler receives file metadata (structure varies by Reflex version). Common keys include `name`, `path`, `size`, and temporary file location.
+
+**Implementation Strategy:**
+- Inspect payload at runtime via logging
+- Validate file type and extension server-side
+- Sanitize filenames and ensure uniqueness
+- Move from temporary location to custom directory
+- Handle errors gracefully
+
+### Complete Handler Example
+
+```python
+# app/state/upload_state.py
+import reflex as rx
+from pathlib import Path
+import os
+import shutil
+from uuid import uuid4
+
+# Configure storage location
+CUSTOM_UPLOAD_DIR = Path("/data/uploads/pdfs")
+CUSTOM_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+class UploadState(rx.State):
+    """State for handling file uploads with validation and custom storage."""
+    
+    uploaded_paths: list[str] = []
+    upload_errors: list[str] = []
+
+    @rx.event
+    def on_uploaded(self, files: list[dict]):
+        """
+        Process uploaded files from rx.upload component.
+        
+        Args:
+            files: List of file metadata dicts (structure varies by Reflex version)
+                   Common keys: 'name', 'path' (temp location), 'size'
+        
+        Processing steps:
+        1. Validate file type and extension
+        2. Sanitize filename and ensure uniqueness
+        3. Move from temporary location to custom directory
+        4. Track results and errors
+        """
+        saved, errs = [], []
+
+        # Inspect payload structure (disable in production)
+        print("Upload payload:", files)
+
+        for f in files:
+            try:
+                # Extract file information
+                tmp_path = Path(f.get("path") or "")
+                original_name = f.get("name") or tmp_path.name
+                filename = os.path.basename(original_name or "uploaded.pdf")
+
+                # Validate file extension
+                _, ext = os.path.splitext(filename.lower())
+                if ext != ".pdf":
+                    errs.append(f"Rejected (not PDF): {filename}")
+                    continue
+
+                # Generate unique filename to prevent collisions
+                unique_name = f"{os.path.splitext(filename)[0]}-{uuid4().hex}{ext}"
+                dest = CUSTOM_UPLOAD_DIR / unique_name
+
+                # Verify temporary file exists
+                if not tmp_path.exists():
+                    errs.append(f"Temp file missing: {tmp_path}")
+                    continue
+
+                # Move file to custom storage location
+                shutil.move(str(tmp_path), str(dest))
+                saved.append(str(dest))
+
+            except Exception as e:
+                errs.append(f"Error processing {f}: {e}")
+
+        # Update state with results
+        self.uploaded_paths = saved
+        self.upload_errors = errs
+
+    def clear(self):
+        """Reset upload state."""
+        self.uploaded_paths = []
+        self.upload_errors = []
+```
+
+**Implementation Notes:**
+- Payload key `path` contains temporary file location (verify via logging)
+- Adjust key extraction if Reflex version uses different field names
+- Add max file size checks if needed
+- Consider MIME type validation for additional security
+- Use logging to debug payload structure in development
+
+---
+
+## UI Component Pattern
+
+### Basic Upload Interface
+
+Render upload component with results display:
+
+```python
+# app/pages/upload_page.py
+import reflex as rx
+from app.state.upload_state import UploadState
+
+# Client-side file filter (advisory only)
+ACCEPT = [".pdf"]
+
+def upload_page() -> rx.Component:
+    """PDF upload page with results display."""
+    return rx.vstack(
+        # Header
+        rx.heading("Upload PDF Files", size="6"),
+        rx.text("Select PDF files to upload to server storage."),
+
+        # Upload component
+        rx.upload(
+            accept=ACCEPT,          # Browser-side filter (validate server-side)
+            multiple=False,          # Single file mode
+            on_upload=UploadState.on_uploaded,
+        ),
+
+        # Actions
+        rx.hstack(
+            rx.button("Clear Results", on_click=UploadState.clear),
+            spacing="3",
+        ),
+
+        # Success results
+        rx.cond(
+            UploadState.uploaded_paths,
+            rx.vstack(
+                rx.heading("Successfully Uploaded:", size="4"),
+                rx.foreach(
+                    UploadState.uploaded_paths,
+                    lambda p: rx.code(p, color_scheme="green")
+                ),
+                spacing="2",
+            ),
+            rx.box(),
+        ),
+
+        # Error results
+        rx.cond(
+            UploadState.upload_errors,
+            rx.vstack(
+                rx.heading("Errors:", size="4"),
+                rx.foreach(
+                    UploadState.upload_errors,
+                    lambda e: rx.text(e, color="red")
+                ),
+                spacing="2",
+            ),
+            rx.box(),
+        ),
+
+        spacing="5",
+        width="100%",
+        max_width="720px",
+    )
+
+app = rx.App()
+app.add_page(upload_page, route="/upload")
+```
+
+---
+
+### Multiple File Upload
+
+Enable multiple file selection:
+
+```python
+rx.upload(
+    accept=[".pdf"],
+    multiple=True,              # Enable multiple file selection
+    on_upload=UploadState.on_uploaded,
+)
+```
+
+**Note:** Event handler already processes file arrays; no server-side changes needed.
+
+---
+
+## Security & Validation Patterns
+
+### Required Validations
+
+**Server-Side Checks (Critical):**
+- Validate file extensions (client-side `accept` is advisory only)
+- Check MIME types if available in payload
+- Enforce maximum file size limits
+- Sanitize filenames using `os.path.basename`
+- Generate unique filenames to prevent collisions (UUID approach)
+
+**Access Control:**
+- Implement authentication checks in `on_uploaded` handler
+- Add rate limiting for upload endpoints
+- Restrict uploads to authorized users/roles
+- Log upload activity for audit trails
+
+**Storage Security:**
+- Place `CUSTOM_UPLOAD_DIR` outside web-served static directories
+- Set appropriate filesystem permissions (write-only for uploads)
+- Implement disk quota enforcement
+- Add virus scanning for production systems
+
+---
+
+## Operational Considerations
+
+### Filesystem Permissions
+
+Ensure Reflex process has write access to upload directory:
+```bash
+# Example: Set appropriate permissions
+chmod 755 /data/uploads
+chown reflex-user:reflex-group /data/uploads
+```
+
+### Upload Size Limits
+
+- Reflex upload size limits vary by version (check Changelog)
+- Default limits may be insufficient for large files
+- For large files, consider:
+  - Custom API endpoint with chunked upload
+  - Client-side chunking with `fetch` API
+  - Streaming upload handlers
+
+### Disk Management
+
+**Implement cleanup policies:**
+- Automated deletion of old files (cron jobs)
+- User-based storage quotas
+- Archive old uploads to cold storage
+- Monitor disk usage alerts
+
+### Monitoring & Logging
+
+**Essential logging:**
+- Log payload structure during development
+- Record successful uploads with paths
+- Track failed uploads with error details
+- Monitor upload volume and patterns
+
+---
+
+## Testing Checklist
+
+### Functional Tests
+
+- [ ] Upload valid PDF file
+- [ ] Verify file appears in custom storage directory
+- [ ] Confirm unique filename generation (no collisions)
+- [ ] Test rejection of non-PDF files
+- [ ] Validate error messages display correctly
+- [ ] Test multiple file uploads (if enabled)
+- [ ] Verify file size limit enforcement
+
+### Security Tests
+
+- [ ] Attempt upload without authentication (should fail)
+- [ ] Try uploading malicious file types
+- [ ] Test filename sanitization with special characters
+- [ ] Verify files cannot overwrite existing files
+- [ ] Test path traversal attempts (e.g., "../../etc/passwd")
+
+### Cross-Platform Tests
+
+- [ ] Test on desktop browsers (Chrome, Firefox, Safari)
+- [ ] Test on mobile browsers (iOS Safari, Chrome Mobile)
+- [ ] Verify upload progress feedback
+- [ ] Test on slow network connections
+
+### Operational Tests
+
+- [ ] Inspect server logs for payload structure
+- [ ] Verify logging captures all operations
+- [ ] Test disk quota enforcement
+- [ ] Confirm cleanup policies execute correctly
+
+---
+
+## Advanced Patterns
+
+### Post-Upload Preview Links
+
+Provide download links for uploaded files:
+
+```python
+# UI component for download links
+rx.foreach(
+    UploadState.uploaded_paths,
+    lambda p: rx.link(
+        "Download",
+        href=f"/download?path={p}",
+        is_external=False
+    )
+)
+```
+
+**Secure download endpoint:**
+```python
+# In your Reflex app, add a FastAPI route
+from fastapi.responses import FileResponse
+
+@app.api.get("/download")
+async def download_file(path: str):
+    """Serve uploaded files securely."""
+    # Validate path to prevent directory traversal
+    file_path = Path(path).resolve()
+    if not file_path.is_relative_to(CUSTOM_UPLOAD_DIR):
+        raise HTTPException(403, "Access denied")
+    
+    # Add authentication check here
+    
+    return FileResponse(
+        file_path,
+        media_type="application/pdf",
+        filename=file_path.name
+    )
+```
+
+### Upload Progress Tracking
+
+Implement progress feedback for large files:
+
+```python
+class UploadState(rx.State):
+    upload_progress: int = 0
+    
+    @rx.event
+    def on_uploaded(self, files: list[dict]):
+        total = len(files)
+        for idx, f in enumerate(files, 1):
+            # Process file...
+            self.upload_progress = int((idx / total) * 100)
+            yield  # Update UI during processing
+```
+
+### File Type Detection
+
+Use MIME type validation:
+
+```python
+import mimetypes
+
+def validate_file_type(file_path: Path) -> bool:
+    """Validate file is actually a PDF."""
+    mime_type, _ = mimetypes.guess_type(str(file_path))
+    return mime_type == "application/pdf"
+```
+
+---
+
+## Related References
+
+### Reflex Documentation
+
+- **API Routes**: https://reflex.dev/docs/api-routes/overview/ (reserved `/_upload` endpoint)
+- **Changelog**: https://build.reflex.dev/changelog/ (upload size limit updates)
+
+### Related Skill References
+
+- **`reflex-api-routes.mdc`**: Custom API endpoint patterns
+- **`reflex-events-handlers.mdc`**: Event handler patterns and async operations
+- **`reflex-state-model.mdc`**: State management and data handling
+- **`reflex-forms.mdc`**: Form validation patterns (applicable to upload validation)
+- **`patterns.md`**: Security and authentication patterns
+
+## Implementation Notes
+
+**Payload Structure Variability:**
+- Exact payload structure varies by Reflex version
+- Use runtime logging during development to inspect structure
+- Adjust key extraction logic based on observed payload format
+- Implement robust error handling for missing/unexpected keys
+
+**Production Readiness:**
+- Replace print statements with proper logging framework
+- Add comprehensive error handling and user feedback
+- Implement authentication and authorization
+- Configure upload size limits appropriately
+- Set up monitoring and alerting for upload failures
+- Document deployment requirements (permissions, paths, quotas)
