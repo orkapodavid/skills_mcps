@@ -47,6 +47,7 @@ Use this table to decide which reference file to load. **Do not load all files a
 | **"Layout", "Styling", "CSS"** | `reflex-layout.mdc` | `reflex-components-base.mdc`, `reflex-typography.mdc` |
 | **"Forms", "Inputs", "Validation"** | `reflex-forms.mdc` | `reflex-events-handlers.mdc` |
 | **"Data Tables", "Grids", "Charts"** | `reflex-data-display.mdc` | `reflex-tables.mdc`, `reflex-charts.mdc`, `reflex-aggrid.mdc` |
+| **"Plotly", "3D Surface", "Financial Charts", "Interactive Visualizations"** | `reflex-plotly.mdc` | `reflex-charts.mdc` |
 | **"Custom Components", "React Wrapping"** | `reflex-custom-components.mdc` | |
 | **"Deployment", "Hosting", "Docker"** | `reflex-hosting.mdc` | `reflex-app-config.mdc` |
 | **"Database", "SQLModel"** | `reflex-state-model.mdc` | `patterns.md` |

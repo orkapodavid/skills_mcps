@@ -1,0 +1,407 @@
+---
+description: Expert guide for Reflex Plotly integration using rx.plotly component for high-performance financial dashboards, 3D surfaces, interactive charts, and event handling
+globs:
+  - "**/*.py"
+---
+
+# Reflex Plotly Integration Expert
+
+You are an expert in Reflex's Plotly integration (`rx.plotly`), specializing in creating high-performance, interactive data visualizations for financial and analytical dashboards.
+
+## Core Concepts
+
+### The `rx.plotly` Component
+
+The `rx.plotly` component bridges server-side `plotly.graph_objects.Figure` and client-side `react-plotly.js`. Unlike scripting environments, **never use `fig.show()`**—pass the figure to the `data` prop instead.
+
+**Canonical Syntax:**
+```python
+import reflex as rx
+import plotly.graph_objects as go
+
+class ChartState(rx.State):
+    fig: go.Figure = go.Figure(layout={'title': 'Loading...'})
+
+    def load_data(self):
+        self.fig = go.Figure(
+            data=[go.Scatter(x=[1, 2, 3], y=[100, 105, 103], mode='lines')],
+            layout=go.Layout(title="Asset Price History")
+        )
+
+def dashboard():
+    return rx.center(
+        rx.plotly(
+            data=ChartState.fig,
+            height="600px",
+            width="100%",
+            use_resize_handler=True,
+        ),
+        on_mount=ChartState.load_data,
+    )
+```
+
+### State Mutability Warning
+
+Reflex detects state changes via assignment. In-place mutations may not trigger re-renders:
+
+**Incorrect:**
+```python
+self.fig.layout.title = "New Title"  # May not trigger update
+```
+
+**Correct:**
+```python
+self.fig.layout.title = "New Title"
+self.fig = self.fig  # Force re-assignment to trigger update
+```
+
+**Best Practice:** Construct a new figure object for immutability, or explicitly re-assign after mutation.
+
+## Event Handling
+
+Since Reflex 0.5.3, native event handlers (`on_click`, `on_hover`, `on_relayout`) are supported directly on `rx.plotly`.
+
+### `on_click` (Drill-Down and Filtering)
+
+Captures clicks on data points. Essential for drill-down interfaces.
+
+**Handler Signature:**
+```python
+def handle_click(self, data: dict):
+    if "points" in data:
+        point = data["points"][0]
+        asset_id = point.get("customdata", "Unknown")
+        price = point.get("y", 0)
+        self.selected_asset = f"{asset_id} @ ${price}"
+```
+
+**Payload Keys:**
+| Key | Type | Description |
+| :--- | :--- | :--- |
+| `curveNumber` | int | Index of the trace in the data array |
+| `pointNumber` | int | Index of the point within the trace |
+| `x` | Any | The x-value of the clicked point |
+| `y` | Any | The y-value of the clicked point |
+| `customdata` | Any | Custom identifier stored with the point |
+
+**Using `customdata` for Asset IDs:**
+```python
+go.Scatter(
+    x=dates,
+    y=prices,
+    customdata=['AAPL', 'AAPL', 'AAPL'],  # Unique identifiers
+    mode='lines+markers'
+)
+```
+
+### `on_hover` (Tooltips and Cross-Hairs)
+
+Fires when cursor enters a point's hit-test radius. Payload is identical to `on_click`.
+
+**Performance Warning:** Avoid heavy operations (DB queries) on hover—use for light state updates only.
+
+### `on_relayout` (Zoom and Pan Synchronization)
+
+Fires when user zooms, pans, or resets axes. Essential for synchronizing time-axes across charts.
+
+**Payload Keys:**
+| Scenario | Payload Keys |
+| :--- | :--- |
+| X-Axis Zoom | `xaxis.range[0]`, `xaxis.range[1]` |
+| Autoscale | `xaxis.autorange`, `yaxis.autorange` |
+| Reset | `autosize` |
+
+**Cross-Chart Synchronization Pattern:**
+```python
+class SyncState(rx.State):
+    common_x_range: list = []
+
+    def handle_relayout(self, data: dict):
+        if "xaxis.range[0]" in data:
+            self.common_x_range = [data["xaxis.range[0]"], data["xaxis.range[1]"]]
+
+# Chart A updates state, Chart B reads from state
+rx.plotly(data=State.chart_a, on_relayout=SyncState.handle_relayout)
+rx.plotly(data=State.chart_b)  # Layout bound to common_x_range
+```
+
+### `on_selected` / `on_selecting` (Box/Lasso Select)
+
+For bulk operations (e.g., selecting outliers). Requires `clickmode="event+select"` in layout.
+
+## Responsive Design
+
+### The "Fill Container" Pattern
+
+Apply all four rules for proper responsiveness:
+
+1. **Reflex Component:** Set `width="100%"` and `height="100%"` (or `height="40vh"`)
+2. **Reflex Component:** Set `use_resize_handler=True`
+3. **Plotly Layout:** Set `autosize=True`
+4. **Plotly Layout:** Do NOT hardcode `width` or `height`
+
+**Responsive Implementation:**
+```python
+rx.box(
+    rx.plotly(
+        data=State.fig,
+        use_resize_handler=True,
+        style={"width": "100%", "height": "100%"}
+    ),
+    width="100%",
+    height="50vh",
+)
+```
+
+### Grid Layouts
+
+Always define explicit columns to prevent zero-width collapse:
+
+```python
+rx.grid(
+    rx.plotly(...),
+    rx.plotly(...),
+    columns="2",
+    spacing="4",
+    width="100%"
+)
+```
+
+## 3D Surface Visualization
+
+Essential for Volatility Surfaces (Implied Volatility vs. Strike vs. Expiry).
+
+### `go.Surface` Implementation
+
+```python
+class SurfaceState(rx.State):
+    fig: go.Figure = go.Figure()
+
+    def generate_surface(self):
+        z_data = pd.read_csv("volatility_data.csv").values
+
+        self.fig = go.Figure(data=[go.Surface(z=z_data)])
+        self.fig.update_layout(
+            title='Implied Volatility Surface',
+            scene=dict(
+                xaxis_title='Strike',
+                yaxis_title='Expiry',
+                zaxis_title='Implied Vol',
+                camera_eye=dict(x=1.87, y=0.88, z=-0.64)
+            ),
+            autosize=True,
+            margin=dict(l=65, r=50, b=65, t=90)
+        )
+
+def surface_page():
+    return rx.center(
+        rx.plotly(data=SurfaceState.fig, height="80vh", width="100%"),
+        on_mount=SurfaceState.generate_surface
+    )
+```
+
+### WebGL Context Limits
+
+Browsers limit active WebGL contexts (8-16 per page). Exceeding causes charts to vanish.
+
+**Mitigation Strategies:**
+1. **SVG Fallback:** For simple 2D charts, use `render_mode='svg'` in trace definition
+2. **Consolidation:** Use subplots to combine multiple 3D visualizations into single Figure
+3. **Virtual WebGL:** Plotly attempts to manage this, but imperfect in complex layouts
+
+## Theming and Styling
+
+### Global Theme Injection
+
+Set a global default theme instead of styling each chart individually:
+
+```python
+import plotly.io as pio
+
+# Use built-in dark theme
+pio.templates.default = "plotly_dark"
+
+# Or create custom "Bloomberg-style" theme
+bloomberg_template = go.layout.Template(
+    layout=go.Layout(
+        paper_bgcolor="#1E1E1E",
+        plot_bgcolor="#1E1E1E",
+        font=dict(family="Roboto Mono, monospace", color="#E0E0E0"),
+        colorway=["#FF9900", "#00A8E0", "#FF3366"]
+    )
+)
+pio.templates["bloomberg"] = bloomberg_template
+pio.templates.default = "bloomberg"
+```
+
+### ModeBar Customization
+
+Use the `config` prop for professional appearance:
+
+```python
+config_props = {
+    "displayModeBar": "hover",
+    "displaylogo": False,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d", "pan2d"],
+    "toImageButtonOptions": {
+        "format": "png",
+        "filename": "portfolio_analysis",
+        "height": 1080,
+        "width": 1920,
+        "scale": 2
+    },
+    "scrollZoom": True
+}
+
+rx.plotly(data=State.fig, config=config_props)
+```
+
+## Production Patterns
+
+### Conditional Rendering with `rx.cond`
+
+Initialize with a skeleton figure to prevent hydration errors:
+
+```python
+class State(rx.State):
+    fig: go.Figure = go.Figure(layout={'title': 'Loading...'})
+    is_loading: bool = True
+```
+
+### Flash of Empty Chart Prevention
+
+Initialize state with a skeleton figure instead of `None`:
+
+```python
+fig: go.Figure = go.Figure(layout={
+    'title': 'Initializing...',
+    'annotations': [{
+        'text': 'Loading data...',
+        'showarrow': False,
+        'xref': 'paper',
+        'yref': 'paper',
+        'x': 0.5,
+        'y': 0.5
+    }]
+})
+```
+
+## Complete "Gold Standard" Component
+
+Copy-paste-ready boilerplate encapsulating all best practices:
+
+```python
+import reflex as rx
+import plotly.graph_objects as go
+from typing import Dict, Any
+
+class PortfolioState(rx.State):
+    """The central state managing the financial chart."""
+
+    # Initialize with skeleton to prevent hydration errors
+    fig: go.Figure = go.Figure(layout={'title': 'Initializing...'})
+    selected_asset: str = "None"
+
+    def on_mount(self):
+        """Initial data load."""
+        self.fig = go.Figure(
+            data=[go.Scatter(
+                x=[1, 2, 3, 4, 5],
+                y=[100, 102, 104, 103, 105],
+                mode='lines+markers',
+                marker=dict(size=10),
+                customdata=['AAPL', 'AAPL', 'AAPL', 'AAPL', 'AAPL'],
+                name='Portfolio Value'
+            )],
+            layout=go.Layout(
+                title="Live Portfolio Performance",
+                autosize=True,
+                margin=dict(l=40, r=40, t=40, b=40),
+                hovermode="closest",
+                clickmode="event+select"
+            )
+        )
+
+    def handle_click(self, data: Dict[str, Any]):
+        """Handle click event, extract customdata (Asset ID)."""
+        if "points" in data:
+            point = data["points"][0]
+            asset_id = point.get("customdata", "Unknown")
+            price = point.get("y", 0)
+            self.selected_asset = f"{asset_id} @ ${price}"
+
+    def handle_relayout(self, data: Dict[str, Any]):
+        """Handle zoom/pan events for cross-chart sync."""
+        pass
+
+def robust_financial_chart():
+    """The 'Gold Standard' component wrapper."""
+    return rx.vstack(
+        rx.text(f"Selected Asset: {PortfolioState.selected_asset}", size="4"),
+        rx.box(
+            rx.plotly(
+                data=PortfolioState.fig,
+                # Layout & Responsiveness
+                width="100%",
+                height="100%",
+                use_resize_handler=True,
+                # Event Bindings
+                on_click=PortfolioState.handle_click,
+                on_relayout=PortfolioState.handle_relayout,
+                # Configuration
+                config={
+                    "displayModeBar": "hover",
+                    "displaylogo": False,
+                    "scrollZoom": True,
+                    "modeBarButtonsToRemove": ["lasso2d", "select2d"]
+                }
+            ),
+            width="100%",
+            height="60vh",
+            border="1px solid #333",
+            border_radius="8px",
+            overflow="hidden",
+        ),
+        width="100%",
+        on_mount=PortfolioState.on_mount
+    )
+```
+
+## High-Frequency Updates (Advanced)
+
+For updates faster than 1Hz (e.g., L2 order book at 10Hz+), the standard state replacement causes bandwidth bottlenecks.
+
+**Advanced Pattern:** Use `rx.call_script` to invoke client-side `Plotly.extendTraces` or `Plotly.restyle`:
+
+```python
+def extend_trace(self):
+    # Extend data client-side without full figure serialization
+    rx.call_script("""
+        Plotly.extendTraces('chart-id', {y: [[newValue]]}, [0]);
+    """)
+```
+
+**Note:** For most dashboards (updates < 1Hz), standard state replacement is sufficient and architecturally cleaner.
+
+## Reflex vs. Dash Migration Notes
+
+| Aspect | Dash | Reflex |
+| :--- | :--- | :--- |
+| State | Stateless HTTP callbacks | Stateful WebSocket |
+| Partial Updates | `Patch()` object | Re-assign state variable |
+| Session Data | `dcc.Store` or Redis | `self` attributes persist |
+
+**Key Difference:** In Reflex, state persists on the server for the session duration. No need to serialize state to client or external cache.
+
+## Best Practices Summary
+
+1. **Never use `fig.show()`** - Pass figure to `data` prop
+2. **Re-assign after mutation** - `self.fig = self.fig` to trigger updates
+3. **Use `customdata`** - Store unique asset IDs for event handling
+4. **Set `use_resize_handler=True`** - Enable responsive behavior
+5. **Set `autosize=True` in layout** - Allow container-based sizing
+6. **Don't hardcode dimensions in Python layout** - Let CSS control size
+7. **Initialize with skeleton figures** - Prevent hydration errors
+8. **Use global themes** - `pio.templates.default` for consistency
+9. **Limit WebGL contexts** - Use SVG for simple 2D charts
+10. **Customize ModeBar** - Remove irrelevant tools, add `scrollZoom`
