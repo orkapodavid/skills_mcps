@@ -10,10 +10,36 @@
     },
     "github": {
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-server-github"],
+      "args": [
+        "-y",
+        "@anthropic-ai/mcp-server-github"
+      ],
       "env": {
         "GITHUB_TOKEN": "${GITHUB_TOKEN}"
       }
+    },
+    "ag-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "ag-mcp"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ],
+      "disabled": true
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp",
+        "--api-key",
+        "REPLACE_ME"
+      ]
     }
   }
 }
