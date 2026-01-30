@@ -1,0 +1,29 @@
+# Baileys LLM Context
+
+## Quick Start
+- npm install @whiskeysockets/baileys
+- Node 18+ recommended
+- TypeScript preferred
+
+## Key APIs
+- makeWASocket() — Create connection
+- useMultiFileAuthState() — Manage credentials
+- sock.ev.on('messages.upsert', handler) — Listen for incoming messages
+- sock.sendMessage(jid, message) — Send message
+
+## Socket Docs
+- Configuration: https://baileys.wiki/docs/socket/configuration/
+- Connecting: https://baileys.wiki/docs/socket/connecting/
+- Events Catalog: https://baileys.wiki/docs/category/socket/
+- Sending Messages: https://baileys.wiki/docs/features/sending-messages
+
+## Example Code
+- Full example.ts (production patterns): https://github.com/WhiskeySockets/Baileys/blob/master/Example/example.ts
+
+## NPM Package
+- https://www.npmjs.com/package/@whiskeysockets/baileys
+
+## Common Patterns
+- Persist creds with `useMultiFileAuthState()` and `saveCreds()` on `creds.update`
+- Use `fetchLatestBaileysVersion()` and log version
+- Implement `getMessage` for retries/polls when needed

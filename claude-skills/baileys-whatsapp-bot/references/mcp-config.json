@@ -1,0 +1,29 @@
+{
+  "name": "baileys-mcp",
+  "transport": "streamable-http",
+  "mount_path": "/mcp",
+  "tools": [
+    {
+      "name": "send_message",
+      "description": "Send a WhatsApp message via Baileys",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "jid": { "type": "string" },
+          "text": { "type": "string" }
+        },
+        "required": ["jid", "text"]
+      }
+    },
+    {
+      "name": "get_chats",
+      "description": "List recent chats",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "name": "get_status",
+      "description": "Get connection status",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    }
+  ]
+}

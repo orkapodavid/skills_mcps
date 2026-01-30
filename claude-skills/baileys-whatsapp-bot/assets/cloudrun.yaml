@@ -1,0 +1,22 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: baileys-mcp
+spec:
+  template:
+    spec:
+      containers:
+        - image: gcr.io/PROJECT_ID/baileys-mcp:latest
+          env:
+            - name: AUTH_DIR
+              value: /data/baileys_auth_info
+            - name: PORT
+              value: "8080"
+          ports:
+            - containerPort: 8080
+      volumes:
+        - name: data
+          emptyDir: {}
+      volumeMounts:
+        - name: data
+          mountPath: /data
