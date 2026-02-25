@@ -1,0 +1,47 @@
+# Annotated minimal config.yaml for symphony-bdk-python
+#
+# Place this file at ~/.symphony/config.yaml for local dev,
+# then load with: BdkConfigLoader.load_from_symphony_dir("config.yaml")
+#
+# Full reference: references/configuration.md
+
+# Pod hostname (your Symphony environment)
+host: acme.symphony.com
+
+# Bot / service account credentials
+bot:
+  username: my-bot-username              # as configured in pod admin console
+  privateKey:
+    path: /path/to/bot/rsa-private-key.pem  # absolute path to RSA private key
+
+# Datafeed settings (real-time event loop)
+datafeed:
+  version: v2                            # v2 recommended; v1 if pod requires it
+
+# (Optional) Retry configuration — uncomment to override defaults
+# retry:
+#   maxAttempts: 10                      # -1 for infinite
+#   initialIntervalMillis: 500
+#   multiplier: 2
+#   maxIntervalMillis: 300000            # 5 minutes
+
+# (Optional) Split topology — uncomment if pod/agent/keyManager differ
+# pod:
+#   host: pod.symphony.com
+#   port: 443
+# agent:
+#   host: agent.symphony.com
+#   port: 443
+# keyManager:
+#   host: km.symphony.com
+#   port: 443
+
+# (Optional) Proxy — uncomment if needed
+# proxy:
+#   host: proxy.corp.com
+#   port: 8080
+
+# (Optional) SSL trust store — uncomment for self-signed certs
+# ssl:
+#   trustStore:
+#     path: /path/to/truststore.pem
